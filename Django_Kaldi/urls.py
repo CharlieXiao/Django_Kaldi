@@ -23,4 +23,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('index/', ks_views.Index),
     path('SectionInfo/',ks_views.getSectionInfo),
+    path('SentenceInfo/',ks_views.getSentenceInfo),
 ] + static(settings.MEDIA_URL, document_root = settings.MEDIA_ROOT)
