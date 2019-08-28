@@ -63,7 +63,7 @@ class Verb(models.Model):
         return self.verb
 
 class VerbExplain(models.Model):
-    # Django会默认以模型的小写加上_set作为反向关联名
+    # Django会默认以模型的！！！全部小写！！！加上_set作为反向关联名
     # 即 可以通过Verb.VerbExplain_set来访问其单词解释
     verb = models.ForeignKey("Verb",on_delete=models.CASCADE)
     pos = models.CharField(max_length=20,verbose_name='part of speech')

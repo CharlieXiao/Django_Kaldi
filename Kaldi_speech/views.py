@@ -129,9 +129,9 @@ def updataStudyStatus(request):
 
 def getVerbTrans(request):
 
-    pattern = r'(\w{1,10}\.)\s(.+)'
+    pattern = r'(\w{1,10}\.)\s(.*)'
 
-    verb = request.GET['verb']
+    verb = request.GET['verb'].lower()
 
     print('looking for verb: {}'.format(verb))
 
@@ -142,12 +142,7 @@ def getVerbTrans(request):
     except ObjectDoesNotExist:
         # 获取不到则调用有道查词API获取单词释义，并添加到数据库中
         verbInfo = json.loads(getTrans(verb))
-        uk_url = verbInfo['basic']['us-speech']
-        us_url = verbInfo['basic']['us-speech']
-        # 下载对应单词的发音
-        uk_file = ContentFile(requests.get(uk_url).content)
-        us_file = ContentFile(requests.get(us_url).content)
-        explains = verbInfo['basic']['explains']
+        raw_explains = verbInfo['basic']['explains']
         # 查询结果中，可能会出现音标不存在的情况
         # 应该先优先尝试获取
         try:
@@ -158,15 +153,58 @@ def getVerbTrans(request):
             us_phonetic = verbInfo['basic']['us-phonetic']
         except KeyError:
             us_phonetic = ""
+
         verbObj = Verb.objects.create(
             verb=verb,
             uk_phonetic=uk_phonetic,
             us_phonetic=us_phonetic,
         )
-        # 同样还有可能出现链接为空的情况，暂时未做处理
+
+        # # 下载对应单词的发音
+
+        uk_url = verbInfo['basic']['uk-speech']
+        # 如果对应链接为空，则无法发音
+        # if uk_url == "":
+        uk_file = ContentFile(requests.get(uk_url).content)
         verbObj.uk_speech.save(verb+'_uk.mp3', uk_file)
+
+        us_url = verbInfo['basic']['us-speech']
+        us_file = ContentFile(requests.get(us_url).content)
         verbObj.us_speech.save(verb+'_us.mp3', us_file)
+        
+        # 同样还有可能出现链接为空的情况，暂时未做处理
 
-    print(verbObj)
+        for explain in raw_explains:
+            e = re.match(pattern,explain)
+            if e != None:
+                VerbExplain.objects.create(
+                    verb=verbObj,
+                    pos=e[1],
+                    explain=e[2]
+                )
+            else:
+                # 如果释义中不存在词性属性时，不添加词性
+                VerbExplain.objects.create(
+                    verb=verbObj,
+                    pos="",
+                    explain=explain
+                )
 
-    return HttpResponse('试运行')
+    verbData = {
+        'verb':verbObj.verb,
+        'uk-phonetic':verbObj.uk_phonetic,
+        'us-phonetic':verbObj.us_phonetic,
+        'uk-speech':verbObj.uk_speech.url,
+        'us-speech':verbObj.us_speech.url,
+        'explains':[]
+    }
+
+    for i in verbObj.verbexplain_set.all():
+        verbData['explains'].append({
+            'pos':i.pos,
+            'explain':i.explain
+        })
+
+    # print(verbData)
+
+    return HttpResponse(json.dumps(verbData))
