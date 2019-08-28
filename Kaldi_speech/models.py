@@ -52,3 +52,23 @@ class Sentence(models.Model):
 
     def __str__(self):
         return self.section.title+" "+self.sentence_en
+
+class Verb(models.Model):
+    verb = models.CharField(max_length=50,verbose_name="vocabulary")
+    uk_phonetic = models.CharField(max_length=100,verbose_name='uk phonetic')
+    us_phonetic = models.CharField(max_length=100,verbose_name='us phonetic')
+    uk_speech = models.FileField(upload_to='verb/',verbose_name='uk speech')
+    us_speech = models.FileField(upload_to='verb/',verbose_name='us speech')
+    def __str__(self):
+        return self.verb
+
+class VerbExplain(models.Model):
+    # Django会默认以模型的小写加上_set作为反向关联名
+    # 即 可以通过Verb.VerbExplain_set来访问其单词解释
+    verb = models.ForeignKey("Verb",on_delete=models.CASCADE)
+    pos = models.CharField(max_length=20,verbose_name='part of speech')
+    explain = models.CharField(max_length=200,verbose_name='explain')
+
+    def __str__(self):
+        return self.verb.verb + " " + self.pos + " " + self.explain
+    
