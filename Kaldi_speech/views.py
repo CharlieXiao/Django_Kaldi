@@ -4,6 +4,7 @@ from Kaldi_speech.models import EveryDayMotto, Course, Section, Sentence, Verb, 
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from YouDaoAPI.text_translation import getTrans
+from YouDaoAPI.text2speech import getSpeech
 from django.core.exceptions import ObjectDoesNotExist
 
 import re
@@ -66,6 +67,7 @@ def getSectionInfo(request):
 
 
 def getSentenceInfo(request):
+
     section_id = request.GET['section_id']
 
     print('section_id = {}'.format(section_id))
@@ -79,11 +81,19 @@ def getSentenceInfo(request):
 
         course_obj = Course.objects.get(id=section_obj.course.id)
 
-        objs = Sentence.objects.filter(section_id=section_id)
+        objs = section_obj.sentence_set.all()
+
+        # 需要动态更新 num_sentences 的值
+
+        print(len(objs))
+
+        section_obj.num_sentences = len(objs)
+
+        section_obj.save()
 
         # 例句数不为0
         if len(objs) != 0:
-            sen_obj['sentenceInfo'] = []
+            sen_obj['sentenceInfo'] = {}
             sen_obj['sectionInfo'] = {
                 'id': section_id,
                 'title': section_obj.title,
@@ -96,26 +106,51 @@ def getSentenceInfo(request):
                 'img': course_obj.course_img.url
             }
 
+            # 排序序号
+
+            index = 1
+
             for obj in objs:
+                
+                print(obj.sentence_src)
+                # 如果是默认录音，则连接有道进行更新
+                if obj.sentence_src == 'default/default.wav':
+                    # 尝试从有道获取句子发音
+                    raw_data = json.loads(getSpeech(obj.sentence_en))
+                    # 如果error的值不为0，代表请求出错，则仍然试使用原来的数据
+                    errorCode = raw_data['errorCode']
+                    if errorCode == '0':
+                        # 数据获取成功
+                        audio_url = raw_data['speakUrl']
+                        audio_file = ContentFile(requests.get(audio_url).content)
+                        obj.sentence_src.save(str(obj.id)+'.mp3',audio_file)
+                        # uk_file = ContentFile(requests.get(uk_url).content)
+                        # verbObj.uk_speech.save(verb+'_uk.mp3', uk_file)
+                        print(audio_url)
+
                 sep = []
                 # 采用正则表达式对拆分英文单词，便于单词释义查询
                 for i in re.finditer(pattern, obj.sentence_en):
                     sep.append(i.group())
 
-                sen_obj['sentenceInfo'].append({
-                    'id': obj.id,
+                sen_obj['sentenceInfo'][obj.id] = {
+                    'index': index,
                     'en': obj.sentence_en,
                     'ch': obj.sentence_ch,
                     'src': obj.sentence_src.url,
                     'en_sep': sep
-                })
+                }
 
+                index += 1
+                
             sen_obj['error'] = 0
         else:
             sen_obj['error'] = 99
 
     except ValueError:
         sen_obj['error'] = 100
+
+    print(sen_obj)
 
     return HttpResponse(json.dumps(sen_obj))
 

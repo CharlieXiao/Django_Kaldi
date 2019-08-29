@@ -7,7 +7,7 @@ from django.utils import timezone
 class EveryDayMotto(models.Model):
     motto = models.CharField(max_length=100,verbose_name="Motto",default="Life is like a boat")
     author = models.CharField(max_length=50,verbose_name="Author",default="Rie fu")
-    poster = models.ImageField(upload_to='motto/poster',verbose_name="poster")
+    poster = models.ImageField(upload_to='motto/poster',verbose_name="poster",default='default/default.png')
     audio = models.FileField(upload_to='motto/audio',verbose_name="audio")
 
     def __str__(self):
@@ -23,7 +23,7 @@ class Course(models.Model):
     name = models.CharField(max_length=100,verbose_name="name")
     intro = models.CharField(max_length=200,verbose_name="introduction")
     num_sections = models.IntegerField(verbose_name="sections")
-    course_img = models.ImageField(upload_to=course_directory_path,verbose_name="poster")
+    course_img = models.ImageField(upload_to=course_directory_path,verbose_name="poster",default='default/default.png')
     num_learners = models.IntegerField(verbose_name="learners",default=0)
     add_time = models.DateTimeField(verbose_name="add time",auto_now_add=True)
 
@@ -48,7 +48,9 @@ class Sentence(models.Model):
     section = models.ForeignKey("Section",on_delete=models.CASCADE)
     sentence_en = models.CharField(max_length=200,verbose_name="English")
     sentence_ch = models.CharField(max_length=200,verbose_name="Chinese")
-    sentence_src = models.FileField(upload_to=section_directory_path,verbose_name="audio")
+    sentence_src = models.FileField(upload_to=section_directory_path,verbose_name="audio",default='default/default.wav')
+
+    # 期望直接在创建models对象时直接连接有道云查询相关句子发音
 
     def __str__(self):
         return self.section.title+" "+self.sentence_en
@@ -57,8 +59,9 @@ class Verb(models.Model):
     verb = models.CharField(max_length=50,verbose_name="vocabulary")
     uk_phonetic = models.CharField(max_length=100,verbose_name='uk phonetic')
     us_phonetic = models.CharField(max_length=100,verbose_name='us phonetic')
-    uk_speech = models.FileField(upload_to='verb/',verbose_name='uk speech')
-    us_speech = models.FileField(upload_to='verb/',verbose_name='us speech')
+    uk_speech = models.FileField(upload_to='verb/',verbose_name='uk speech',default='default/default.wav')
+    us_speech = models.FileField(upload_to='verb/',verbose_name='us speech',default='default/default.wav')
+
     def __str__(self):
         return self.verb
 
