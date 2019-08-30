@@ -12,6 +12,8 @@ import json
 import os
 import requests
 
+request_url = 'http://127.0.0.1:8000'
+
 
 # Create your views here.
 
@@ -27,6 +29,34 @@ def Index(request):
     motto_obj['poster'] = 'http://'+request.get_host()+motto.poster.url
     return HttpResponse(json.dumps(motto_obj))
 
+def getCourseInfo(requests):
+    order = requests.GET['order']
+    print('课程要求排列顺序为 ： {}'.format(order))
+    if order == 'default':
+        course_objs = Course.objects.all()
+    elif order == 'heat':
+        # 按照学习人数从大到小排序，需要反序
+        course_objs = Course.objects.order_by('num_learners').reverse()
+    elif order == 'new':
+        # 按时间排序默认是按添加事件的先后，此处需要反序
+        course_objs = Course.objects.order_by('add_time').reverse()
+
+    courseInfo = []
+
+    for obj in course_objs:
+        # 遍历每一个课程，更新课程中章节信息
+        obj.num_sections = len(obj.section_set.all())
+        obj.save()
+
+        courseInfo.append({
+            'id':obj.id,
+            'name':obj.name,
+            'num_sections':obj.num_sections,
+            'img':request_url+obj.course_img.url,
+        })
+
+    return HttpResponse(json.dumps(courseInfo))
+
 
 def getSectionInfo(request):
     course_id = request.GET['course_id']
@@ -36,7 +66,14 @@ def getSectionInfo(request):
     try:
         course_obj = Course.objects.get(id=course_id)
 
-        section_objs = Section.objects.filter(course_id=course_id)
+        # section_objs = Section.objects.filter(course_id=course_id)
+
+        section_objs = course_obj.section_set.all()
+
+        # 动态更新课程中的章节数
+        course_obj.num_sections = len(section_objs)
+
+        course_obj.save()
 
         sec_obj['courseInfo'] = {
             'id': course_obj.id,
@@ -50,13 +87,11 @@ def getSectionInfo(request):
         sec_obj['courseSec'] = []
 
         for sec in section_objs:
-            print(sec)
-            temp = {
+            sec_obj['courseSec'].append({
                 'id': sec.id,
                 'title': sec.title,
                 'subtitle': sec.subtitle
-            }
-            sec_obj['courseSec'].append(temp)
+            })
 
         sec_obj['error'] = 0
 
@@ -70,7 +105,7 @@ def getSentenceInfo(request):
 
     section_id = request.GET['section_id']
 
-    print('section_id = {}'.format(section_id))
+    # print('section_id = {}'.format(section_id))
 
     sen_obj = {}
 
@@ -85,7 +120,7 @@ def getSentenceInfo(request):
 
         # 需要动态更新 num_sentences 的值
 
-        print(len(objs))
+        # print(len(objs))
 
         section_obj.num_sentences = len(objs)
 
@@ -112,7 +147,7 @@ def getSentenceInfo(request):
 
             for obj in objs:
                 
-                print(obj.sentence_src)
+                # print(obj.sentence_src)
                 # 如果是默认录音，则连接有道进行更新
                 if obj.sentence_src == 'default/default.wav':
                     # 尝试从有道获取句子发音
@@ -126,7 +161,7 @@ def getSentenceInfo(request):
                         obj.sentence_src.save(str(obj.id)+'.mp3',audio_file)
                         # uk_file = ContentFile(requests.get(uk_url).content)
                         # verbObj.uk_speech.save(verb+'_uk.mp3', uk_file)
-                        print(audio_url)
+                        # print(audio_url)
 
                 sep = []
                 # 采用正则表达式对拆分英文单词，便于单词释义查询
@@ -150,7 +185,7 @@ def getSentenceInfo(request):
     except ValueError:
         sen_obj['error'] = 100
 
-    print(sen_obj)
+    # print(sen_obj)
 
     return HttpResponse(json.dumps(sen_obj))
 

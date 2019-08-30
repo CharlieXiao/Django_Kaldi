@@ -22,8 +22,9 @@ import Kaldi_speech.views as ks_views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('index/', ks_views.Index),
+    path('CourseInfo/',ks_views.getCourseInfo),
     path('SectionInfo/',ks_views.getSectionInfo),
     path('SentenceInfo/',ks_views.getSentenceInfo),
+    path('VerbTrans/',ks_views.getVerbTrans),
     path('updateStudyStatus/',ks_views.updataStudyStatus),
-    path('getVerbTrans/',ks_views.getVerbTrans),
 ] + static(settings.MEDIA_URL, document_root = settings.MEDIA_ROOT)

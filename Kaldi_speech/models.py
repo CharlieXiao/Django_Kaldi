@@ -22,7 +22,7 @@ class Course(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100,verbose_name="name")
     intro = models.CharField(max_length=200,verbose_name="introduction")
-    num_sections = models.IntegerField(verbose_name="sections")
+    num_sections = models.IntegerField(verbose_name="sections",default=0)
     course_img = models.ImageField(upload_to=course_directory_path,verbose_name="poster",default='default/default.png')
     num_learners = models.IntegerField(verbose_name="learners",default=0)
     add_time = models.DateTimeField(verbose_name="add time",auto_now_add=True)
@@ -35,7 +35,7 @@ class Section(models.Model):
     course = models.ForeignKey("Course",on_delete=models.CASCADE)
     title = models.CharField(max_length=100,verbose_name="title")
     subtitle = models.CharField(max_length=200,verbose_name="subtitle")
-    num_sentences = models.IntegerField(verbose_name="sentences")
+    num_sentences = models.IntegerField(verbose_name="sentences",default=0)
     
     def __str__(self):
         return self.course.name+" "+self.title
