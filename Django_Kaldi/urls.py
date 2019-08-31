@@ -26,5 +26,6 @@ urlpatterns = [
     path('SectionInfo/',ks_views.getSectionInfo),
     path('SentenceInfo/',ks_views.getSentenceInfo),
     path('VerbTrans/',ks_views.getVerbTrans),
+    path('UserLogin/',ks_views.userLogin),
     path('updateStudyStatus/',ks_views.updataStudyStatus),
 ] + static(settings.MEDIA_URL, document_root = settings.MEDIA_ROOT)

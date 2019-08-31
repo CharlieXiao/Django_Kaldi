@@ -74,4 +74,37 @@ class VerbExplain(models.Model):
 
     def __str__(self):
         return self.verb.verb + " " + self.pos + " " + self.explain
-    
+
+class User(models.Model):
+    open_id = models.CharField(max_length=100,verbose_name='user open id')
+    # 保存用户加入时间
+    learn_days = models.DateField(verbose_name='add time',auto_now_add=True)
+
+    def __str__(self):
+        return self.open_id
+
+class UserVerb(models.Model):
+    # 中间表，连接用户数据库和单词数据库
+    user = models.ForeignKey("User",on_delete=models.CASCADE)
+    verb = models.ForeignKey('Verb',on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.user.open_id + ' ' + self.verb.verb
+
+def useraudio_directory_path(instance,filename):
+    return 'user/{}/{}'.format(instance.user.open_id,filename)
+
+class UserCourse(models.Model):
+    # 中间表，连接用户数据可和课程数据库
+    user = models.ForeignKey("User",on_delete=models.CASCADE)
+    # 只要知道当前例句即可对应到当且章节和当前课程
+    curr_sentence = models.IntegerField(default=0,verbose_name='current sentence')
+    # 用户录音
+    audio = models.FileField(default='default/default.wav',upload_to=useraudio_directory_path,verbose_name='user audio')
+    # 用户发音得分
+    score = models.IntegerField(default=90,verbose_name='score')
+
+    def __str__(self):
+        curr_section = Section.objects.get(id=self.curr_sentence.section)
+        curr_course = Course.objects.get(id=self.curr_section.course)
+        return '{} : {} -> {} -> {}'.format(self.user.open_id,curr_course.name,curr_section.title,self.curr_sentence.sentence_en)

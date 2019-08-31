@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from django.http import HttpResponse
-from Kaldi_speech.models import EveryDayMotto, Course, Section, Sentence, Verb, VerbExplain
+from Kaldi_speech.models import EveryDayMotto, Course, Section, Sentence, Verb, VerbExplain,User,UserCourse,UserVerb
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from YouDaoAPI.text_translation import getTrans
@@ -189,6 +189,20 @@ def getSentenceInfo(request):
 
     return HttpResponse(json.dumps(sen_obj))
 
+def userLogin(request):
+    WX_URL = 'https://api.weixin.qq.com/sns/jscode2session'
+    APP_SECRECT = 'b1ee7e749ce757a9831dd942ac7e5730'
+    APP_ID = 'wx28edbe6419ec7914'
+    code = request.GET['code']
+    data = {
+        'appid':APP_ID,
+        'secret':APP_SECRECT,
+        'js_code':code,
+        'grant_type':'authorization_code'
+    }
+    res = requests.get(WX_URL,params=data)
+    print(res.content)
+    return HttpResponse('数据还没准备好嘛')
 
 def updataStudyStatus(request):
     # 获取用户当前学习状况
