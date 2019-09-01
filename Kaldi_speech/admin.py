@@ -1,5 +1,5 @@
 from django.contrib import admin
-from Kaldi_speech.models import EveryDayMotto,Course,Section,Sentence,Verb,VerbExplain,User,UserCourse,UserVerb
+from Kaldi_speech.models import EveryDayMotto,Course,Section,Sentence,Verb,VerbExplain,User,UserCourse,UserVerb,UserAudio
 
 # Register your models here.
 
@@ -25,3 +25,5 @@ admin.site.register(User)
 admin.site.register(UserCourse)
 
 admin.site.register(UserVerb)
+
+admin.site.register(UserAudio)

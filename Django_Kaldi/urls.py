@@ -28,4 +28,6 @@ urlpatterns = [
     path('VerbTrans/',ks_views.getVerbTrans),
     path('UserLogin/',ks_views.userLogin),
     path('updateStudyStatus/',ks_views.updataStudyStatus),
+    path('addVerbFav/',ks_views.addVerbFav),
+    path('VerbList/',ks_views.getVerbList),
 ] + static(settings.MEDIA_URL, document_root = settings.MEDIA_ROOT)

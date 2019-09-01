@@ -8,7 +8,7 @@ class EveryDayMotto(models.Model):
     motto = models.CharField(max_length=100,verbose_name="Motto",default="Life is like a boat")
     author = models.CharField(max_length=50,verbose_name="Author",default="Rie fu")
     poster = models.ImageField(upload_to='motto/poster',verbose_name="poster",default='default/default.png')
-    audio = models.FileField(upload_to='motto/audio',verbose_name="audio")
+    audio = models.FileField(upload_to='motto/audio',verbose_name="audio",default='default/default.wav')
 
     def __str__(self):
         return self.author + " " + self.motto
@@ -21,7 +21,7 @@ def course_directory_path(instance,filename):
 class Course(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100,verbose_name="name")
-    intro = models.CharField(max_length=200,verbose_name="introduction")
+    intro = models.CharField(max_length=200,verbose_name="introduction",default='想说点什么...')
     num_sections = models.IntegerField(verbose_name="sections",default=0)
     course_img = models.ImageField(upload_to=course_directory_path,verbose_name="poster",default='default/default.png')
     num_learners = models.IntegerField(verbose_name="learners",default=0)
@@ -77,8 +77,12 @@ class VerbExplain(models.Model):
 
 class User(models.Model):
     open_id = models.CharField(max_length=100,verbose_name='user open id')
+
     # 保存用户加入时间
-    learn_days = models.DateField(verbose_name='add time',auto_now_add=True)
+    add_time = models.DateField(verbose_name='add time',auto_now_add=True)
+
+    # 当前课程，仅记录id
+    curr_course = models.IntegerField(verbose_name='current course',default=-1)
 
     def __str__(self):
         return self.open_id
@@ -94,17 +98,39 @@ class UserVerb(models.Model):
 def useraudio_directory_path(instance,filename):
     return 'user/{}/{}'.format(instance.user.open_id,filename)
 
+class UserAudio(models.Model):
+    user = models.ForeignKey("User",on_delete=models.CASCADE)
+
+    sentence = models.ForeignKey("Sentence",on_delete=models.CASCADE)
+
+    score = models.IntegerField(default=90,verbose_name="score")
+
+    audio = models.FileField(default='default/default.wav',upload_to=useraudio_directory_path,verbose_name='user audio')
+
+# 设置默认值
+def course_default():
+    objs = Course.objects.all()
+    if len(objs) == 0:
+        # 不存在课程，添加一个，但最好直接存在，按理课程一定存在
+        print('不存在课程，请及时添加课程')
+    else:
+        # 返回第一个课程
+        return objs[0].id
+
 class UserCourse(models.Model):
     # 中间表，连接用户数据可和课程数据库
+    # 存储用户学习所有课程
     user = models.ForeignKey("User",on_delete=models.CASCADE)
     # 只要知道当前例句即可对应到当且章节和当前课程
-    curr_sentence = models.IntegerField(default=0,verbose_name='current sentence')
-    # 用户录音
-    audio = models.FileField(default='default/default.wav',upload_to=useraudio_directory_path,verbose_name='user audio')
-    # 用户发音得分
-    score = models.IntegerField(default=90,verbose_name='score')
+
+    course = models.ForeignKey("Course",on_delete=models.CASCADE,default=course_default)
+
+    # 只要存储对应课程学习章节的id即可
+    curr_section = models.IntegerField(default=-1,verbose_name='current section')
+
+    # 存储对应章节的学习例句
+    curr_sentence = models.IntegerField(default=-1,verbose_name='current sentence')
 
     def __str__(self):
-        curr_section = Section.objects.get(id=self.curr_sentence.section)
-        curr_course = Course.objects.get(id=self.curr_section.course)
-        return '{} : {} -> {} -> {}'.format(self.user.open_id,curr_course.name,curr_section.title,self.curr_sentence.sentence_en)
+        return '{} : {} -> {} -> {}'.format(self.user.open_id,self.course.name,self.curr_section,self.curr_sentence)
+

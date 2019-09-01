@@ -11,6 +11,7 @@ import re
 import json
 import os
 import requests
+import datetime
 
 request_url = 'http://127.0.0.1:8000'
 
@@ -18,15 +19,31 @@ request_url = 'http://127.0.0.1:8000'
 # Create your views here.
 
 def Index(request):
+
+    open_id = request.GET['open_id']
+
+    print('user open id : {}'.format(open_id))
+
+    user_obj = User.objects.get(open_id=open_id)
+
+    td = datetime.datetime.now()
+
+    curr_date = datetime.date(td.year,td.month,td.day)
+
+    # 计算用户学习天数
+    learn_days = (curr_date-user_obj.add_time).days
+
     # 实际在首页还会显示用户学习天数等信息，点击开始学习直接进入上次未完成的课程，没有则直接进入课程列表
     # 获得每日格言
     motto = EveryDayMotto.objects.get(id=1)
-    host = request.get_host()
-    print('http://'+request.get_host()+motto.poster.url)
-    motto_obj = {}
-    motto_obj['motto'] = motto.motto
-    motto_obj['author'] = motto.author
-    motto_obj['poster'] = 'http://'+request.get_host()+motto.poster.url
+
+    motto_obj = {
+        'motto':motto.motto,
+        'author':motto.author,
+        'poster':request_url+motto.poster.url,
+        'learn_days':learn_days,
+    }
+
     return HttpResponse(json.dumps(motto_obj))
 
 def getCourseInfo(requests):
@@ -59,51 +76,58 @@ def getCourseInfo(requests):
 
 
 def getSectionInfo(request):
+
+    open_id = request.GET['open_id']
+
     course_id = request.GET['course_id']
 
     sec_obj = {}
 
+    course_obj = Course.objects.get(id=course_id)
+
+    section_objs = course_obj.section_set.all()
+
+    user_obj = User.objects.get(open_id = open_id)
+
+    # 获取当前用户学习情况
     try:
-        course_obj = Course.objects.get(id=course_id)
+        uc_obj = UserCourse.objects.get(user=user_obj,course=course_obj)
+        curr_section = uc_obj.curr_section
+    except ObjectDoesNotExist:
+        curr_section = section_objs[0].id
 
-        # section_objs = Section.objects.filter(course_id=course_id)
+    # 动态更新课程中的章节数
+    course_obj.num_sections = len(section_objs)
 
-        section_objs = course_obj.section_set.all()
+    course_obj.save()
 
-        # 动态更新课程中的章节数
-        course_obj.num_sections = len(section_objs)
+    sec_obj['courseInfo'] = {
+        'id': course_obj.id,
+        'name': course_obj.name,
+        'intro': course_obj.intro,
+        'curr_section': curr_section,
+        'sections': course_obj.num_sections,
+        'img': course_obj.course_img.url
+    }
 
-        course_obj.save()
+    sec_obj['courseSec'] = []
 
-        sec_obj['courseInfo'] = {
-            'id': course_obj.id,
-            'name': course_obj.name,
-            'intro': course_obj.intro,
-            'curr_section': section_objs[0].id,
-            'sections': course_obj.num_sections,
-            'img': course_obj.course_img.url
-        }
-
-        sec_obj['courseSec'] = []
-
-        for sec in section_objs:
-            sec_obj['courseSec'].append({
-                'id': sec.id,
-                'title': sec.title,
-                'subtitle': sec.subtitle
-            })
-
-        sec_obj['error'] = 0
-
-    except ValueError:
-        sec_obj['error'] = 100
+    for sec in section_objs:
+        sec_obj['courseSec'].append({
+            'id': sec.id,
+            'title': sec.title,
+            'subtitle': sec.subtitle
+        })
 
     return HttpResponse(json.dumps(sec_obj))
 
 
 def getSentenceInfo(request):
 
-    section_id = request.GET['section_id']
+    section_id = int(request.GET['section_id'])
+
+    # 获取用户open_id，修改相关信息
+    open_id = request.GET['open_id']
 
     # print('section_id = {}'.format(section_id))
 
@@ -111,79 +135,96 @@ def getSentenceInfo(request):
 
     pattern = r'\w+\'\w+|\w+-\w+|[\.\,\;\?\!\-\:\(\)\'\"]+|\w+'
 
-    try:
-        section_obj = Section.objects.get(id=section_id)
+    user_obj = User.objects.get(open_id=open_id)
 
-        course_obj = Course.objects.get(id=section_obj.course.id)
+    section_obj = Section.objects.get(id=section_id)
 
-        objs = section_obj.sentence_set.all()
+    course_obj = Course.objects.get(id=section_obj.course.id)
 
-        # 需要动态更新 num_sentences 的值
+    objs = section_obj.sentence_set.all()
 
-        # print(len(objs))
+    # 需要动态更新 num_sentences 的值
 
-        section_obj.num_sentences = len(objs)
+    # print(len(objs))
 
-        section_obj.save()
+    section_obj.num_sentences = len(objs)
 
-        # 例句数不为0
-        if len(objs) != 0:
-            sen_obj['sentenceInfo'] = {}
-            sen_obj['sectionInfo'] = {
-                'id': section_id,
-                'title': section_obj.title,
-                'subtitle': section_obj.subtitle,
-                'num_sentences': section_obj.num_sentences,
-                'curr_sentence': objs[0].id
-            }
-            sen_obj['courseInfo'] = {
-                'id': course_obj.id,
-                'img': course_obj.course_img.url
-            }
+    section_obj.save()
 
-            # 排序序号
+    # 例句数不为0
+    if len(objs) != 0:
+        curr_sentence = objs[0].id
+        # 更新用户数据和用户课程数据库
+        try:
+            uc_obj = UserCourse.objects.get(user=user_obj,course=course_obj)
+            # 此处section_id是字符串类型的，而uc_obj.curr_section是整型，因而不相等
+            if uc_obj.curr_section == section_id:
+                curr_sentence = uc_obj.curr_sentence
+            else:
+                uc_obj.curr_section = section_id
+                uc_obj.curr_sentence = curr_sentence
+                uc_obj.save()
+        except ObjectDoesNotExist:
+            uc_obj = uc.objects.create(user=user_obj,course=course_obj,curr_section=section_id,curr_sentence=curr_sentence)
 
-            index = 1
+        #更新当前课程
+        user_obj.curr_course = course_obj.id
 
-            for obj in objs:
+        user_obj.save()
+
+        sen_obj['sentenceInfo'] = {}
+        sen_obj['sectionInfo'] = {
+            'id': section_id,
+            'title': section_obj.title,
+            'subtitle': section_obj.subtitle,
+            'num_sentences': section_obj.num_sentences,
+            'curr_sentence': curr_sentence
+        }
+        sen_obj['courseInfo'] = {
+            'id': course_obj.id,
+            'img': course_obj.course_img.url
+        }
+
+        # 排序序号
+
+        index = 1
+
+        for obj in objs:
                 
-                # print(obj.sentence_src)
-                # 如果是默认录音，则连接有道进行更新
-                if obj.sentence_src == 'default/default.wav':
-                    # 尝试从有道获取句子发音
-                    raw_data = json.loads(getSpeech(obj.sentence_en))
-                    # 如果error的值不为0，代表请求出错，则仍然试使用原来的数据
-                    errorCode = raw_data['errorCode']
-                    if errorCode == '0':
-                        # 数据获取成功
-                        audio_url = raw_data['speakUrl']
-                        audio_file = ContentFile(requests.get(audio_url).content)
-                        obj.sentence_src.save(str(obj.id)+'.mp3',audio_file)
-                        # uk_file = ContentFile(requests.get(uk_url).content)
-                        # verbObj.uk_speech.save(verb+'_uk.mp3', uk_file)
-                        # print(audio_url)
+            # print(obj.sentence_src)
+            # 如果是默认录音，则连接有道进行更新
+            if obj.sentence_src == 'default/default.wav':
+                # 尝试从有道获取句子发音
+                raw_data = json.loads(getSpeech(obj.sentence_en))
+                # 如果error的值不为0，代表请求出错，则仍然试使用原来的数据
+                errorCode = raw_data['errorCode']
+                if errorCode == '0':
+                    # 数据获取成功
+                    audio_url = raw_data['speakUrl']
+                    audio_file = ContentFile(requests.get(audio_url).content)
+                    obj.sentence_src.save(str(obj.id)+'.mp3',audio_file)
+                    # uk_file = ContentFile(requests.get(uk_url).content)
+                    # verbObj.uk_speech.save(verb+'_uk.mp3', uk_file)
+                    # print(audio_url)
 
-                sep = []
-                # 采用正则表达式对拆分英文单词，便于单词释义查询
-                for i in re.finditer(pattern, obj.sentence_en):
-                    sep.append(i.group())
+            sep = []
+            # 采用正则表达式对拆分英文单词，便于单词释义查询
+            for i in re.finditer(pattern, obj.sentence_en):
+                sep.append(i.group())
 
-                sen_obj['sentenceInfo'][obj.id] = {
-                    'index': index,
-                    'en': obj.sentence_en,
-                    'ch': obj.sentence_ch,
-                    'src': obj.sentence_src.url,
-                    'en_sep': sep
-                }
+            sen_obj['sentenceInfo'][obj.id] = {
+                'index': index,
+                'en': obj.sentence_en,
+                'ch': obj.sentence_ch,
+                'src': obj.sentence_src.url,
+                'en_sep': sep
+            }
 
-                index += 1
+            index += 1
                 
-            sen_obj['error'] = 0
-        else:
-            sen_obj['error'] = 99
-
-    except ValueError:
-        sen_obj['error'] = 100
+        sen_obj['error'] = 0
+    else:
+        sen_obj['error'] = 99
 
     # print(sen_obj)
 
@@ -200,15 +241,41 @@ def userLogin(request):
         'js_code':code,
         'grant_type':'authorization_code'
     }
-    res = requests.get(WX_URL,params=data)
-    print(res.content)
-    return HttpResponse('数据还没准备好嘛')
+
+    res = json.loads(requests.get(WX_URL,params=data).content)
+
+    print(res)
+
+    open_id = res['openid']
+
+    # get_or_create返回的是一个元组
+    user_obj = User.objects.get_or_create(open_id=open_id)
+
+    # 返回open_id,并在小程序中存储在本地
+
+    data = {
+        'open_id':open_id,
+    }
+
+    return HttpResponse(json.dumps(data))
 
 def updataStudyStatus(request):
     # 获取用户当前学习状况
-    status = request.GET['curr_sentence']
-    print('Study Status: {}'.format(status))
-    return HttpResponse('服务器维护中，请稍后再试')
+    open_id = request.GET['open_id']
+    
+    up_type = request.GET['type']
+
+    user_obj = User.objects.get(open_id=open_id)
+
+    if up_type == '1':
+        curr_sentence = request.GET['curr_sentence']
+        uc_obj = UserCourse.objects.get(user=user_obj,course=user_obj.curr_course) 
+        print(uc_obj)
+        uc_obj.curr_sentence = curr_sentence
+        uc_obj.save()
+        return HttpResponse('更新成功')
+
+    return HttpResponse('服务器维护中')
 
 
 def getVerbTrans(request):
@@ -216,6 +283,10 @@ def getVerbTrans(request):
     pattern = r'(\w{1,10}\.)\s(.*)'
 
     verb = request.GET['verb'].lower()
+
+    open_id = request.GET['open_id']
+
+    user_obj = User.objects.get(open_id=open_id)
 
     print('looking for verb: {}'.format(verb))
 
@@ -274,13 +345,23 @@ def getVerbTrans(request):
                     explain=explain
                 )
 
+    # 查询用户是否收藏过单词
+    try:
+        uv_obj = UserVerb.objects.get(user=user_obj,verb=verbObj)
+        isFav = True
+        print('用户收藏过这个单词了嗷')
+    except ObjectDoesNotExist:
+        isFav = False
+        print('用户没收藏过这个单词嗷')
+
     verbData = {
         'verb':verbObj.verb,
         'uk-phonetic':verbObj.uk_phonetic,
         'us-phonetic':verbObj.us_phonetic,
         'uk-speech':verbObj.uk_speech.url,
         'us-speech':verbObj.us_speech.url,
-        'explains':[]
+        'explains':[],
+        'isFav': isFav
     }
 
     for i in verbObj.verbexplain_set.all():
@@ -292,3 +373,26 @@ def getVerbTrans(request):
     # print(verbData)
 
     return HttpResponse(json.dumps(verbData))
+
+def addVerbFav(request):
+    open_id = request.GET['open_id']
+    isFav = request.GET['isFav']
+    verb = request.GET['verb']
+
+    user_obj = User.objects.get(open_id=open_id)
+
+    verb_obj = Verb.objects.get(verb=verb)
+
+    if isFav == 'true':
+        # 用户取消收藏
+        uv_obj = UserVerb.objects.get(user=user_obj,verb=verb_obj)
+        uv_obj.delete()
+
+    else:
+        # 用户添加收藏
+        UserVerb.objects.create(user=user_obj,verb=verb_obj)
+
+    return HttpResponse('处理成功')
+
+def getVerbList(request):
+    return HttpResponse('数据处理中')
