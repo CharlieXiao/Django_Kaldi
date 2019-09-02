@@ -395,4 +395,55 @@ def addVerbFav(request):
     return HttpResponse('处理成功')
 
 def getVerbList(request):
-    return HttpResponse('数据处理中')
+    open_id = request.GET['open_id']
+
+    user_obj = User.objects.get(open_id=open_id)
+
+    vb_objs = user_obj.userverb_set.all()
+
+    res_obj = {}
+
+    # 判断用户是否有收藏过单词
+    if len(vb_objs) == 0:
+        res_obj['hasVerb'] = False
+    else:
+        print('用户有收藏过单词嗷')
+
+        res_obj['hasVerb'] = True
+
+        res_obj['verbList'] = []
+
+        for obj in vb_objs:
+            temp_verb = obj.verb
+
+            # 对于explain需要用正则表达式获取其第一个解释的第一个
+
+            explain = temp_verb.verbexplain_set.all()[0]
+
+            temp_obj = {
+                'verb':temp_verb.verb,
+                'id':temp_verb.id,
+                'phonetic':temp_verb.us_phonetic,
+                'trans':{
+                    'pos':explain.pos,
+                    'explain':explain.explain.split('；')[0]
+                },
+                'speech':request_url+temp_verb.us_speech.url,
+                'notRemove':True,
+            }
+
+            res_obj['verbList'].append(temp_obj)
+
+    return HttpResponse(json.dumps(res_obj))
+
+def removeVerbList(request):
+    removeList = json.loads(request.GET['removeList'])
+    open_id = request.GET['open_id']
+
+    user_obj = User.objects.get(open_id=open_id)
+
+    for verb in removeList:
+        temp_obj = UserVerb.objects.get(user=user_obj,verb=verb)
+        temp_obj.delete()
+
+    return HttpResponse('处理成功')

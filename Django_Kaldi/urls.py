@@ -30,4 +30,5 @@ urlpatterns = [
     path('updateStudyStatus/',ks_views.updataStudyStatus),
     path('addVerbFav/',ks_views.addVerbFav),
     path('VerbList/',ks_views.getVerbList),
+    path('removeVerbList/',ks_views.removeVerbList),
 ] + static(settings.MEDIA_URL, document_root = settings.MEDIA_ROOT)
