@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from django.http import HttpResponse
-from Kaldi_speech.models import EveryDayMotto, Course, Section, Sentence, Verb, VerbExplain,User,UserCourse,UserVerb
+from Kaldi_speech.models import EveryDayMotto, Course, Section, Sentence, Verb, VerbExplain,User,UserCourse,UserVerb,UserAudio
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from YouDaoAPI.text_translation import getTrans
@@ -165,7 +165,7 @@ def getSentenceInfo(request):
                 uc_obj.curr_sentence = curr_sentence
                 uc_obj.save()
         except ObjectDoesNotExist:
-            uc_obj = uc.objects.create(user=user_obj,course=course_obj,curr_section=section_id,curr_sentence=curr_sentence)
+            uc_obj = UserCourse.objects.create(user=user_obj,course=course_obj,curr_section=section_id,curr_sentence=curr_sentence)
 
         #更新当前课程
         user_obj.curr_course = course_obj.id
@@ -449,5 +449,91 @@ def removeVerbList(request):
     return HttpResponse('处理成功')
 
 def judgeAudio(request):
-    print(request.POST)
-    return HttpResponse('服务器处理中')
+    #print(request.POST)
+    #使用DJango作为微信小程序后端，需要禁用Django的CSRF cookie监测
+    open_id = request.POST['open_id']
+    sentence_id = int(request.POST['sentence_id'])
+    # 采用read直接读取二进制文件，对于较大文件不便使用，但此处用户录音一般不超过一分钟，可以使用
+    user_audio = ContentFile(request.FILES['audio'].read())
+
+    user_obj = User.objects.get(open_id=open_id)
+
+    sentence_obj = Sentence.objects.get(id=sentence_id)
+
+    # score = getScore()
+
+    score = 80
+
+    try:
+        ua_obj = UserAudio.objects.get(user=user_obj,sentence=sentence_obj)
+        # 删除过去的发音，并替换
+        ua_obj.audio.delete()
+        ua_obj.audio.save('{}_{}.mp3'.format(user_obj.id,sentence_obj.id),user_audio)
+        ua_obj.score = score
+        ua_obj.save()
+        print('用户以前发音过')
+    except ObjectDoesNotExist:
+        print('用户第一次发音')
+        ua_obj = UserAudio.objects.create(user=user_obj,sentence=sentence_obj,score=score)
+        ua_obj.audio.save('{}_{}.mp3'.format(user_obj.id,sentence_id),user_audio)
+        #ua_obj.save()
+
+    res = {
+        'score':score
+    }
+
+    return HttpResponse(json.dumps(res))
+
+def getAudioList(request):
+    open_id = request.GET['open_id']
+
+    user_obj = User.objects.get(open_id=open_id)
+
+    va_objs = user_obj.useraudio_set.all()
+
+    res_obj = {}
+
+    # 判断用户是否有收藏过单词
+    if len(va_objs) == 0:
+        res_obj['hasAudio'] = False
+    else:
+        print('用户有收藏过单词嗷')
+
+        res_obj['hasAudio'] = True
+
+        res_obj['AudioList'] = []
+
+        for obj in va_objs:
+            temp_sentence = obj.sentence
+
+            # 对于explain需要用正则表达式获取其第一个解释的第一个
+
+            explain = temp_sentence.verbexplain_set.all()[0]
+
+            temp_obj = {
+                'verb':temp_verb.verb,
+                'id':temp_verb.id,
+                'phonetic':temp_verb.us_phonetic,
+                'trans':{
+                    'pos':explain.pos,
+                    'explain':explain.explain.split('；')[0]
+                },
+                'speech':request_url+temp_verb.us_speech.url,
+                'notRemove':True,
+            }
+
+            res_obj['verbList'].append(temp_obj)
+
+    return HttpResponse(json.dumps(res_obj))
+
+def removeAudioList(request):
+    removeList = json.loads(request.GET['removeList'])
+    open_id = request.GET['open_id']
+
+    user_obj = User.objects.get(open_id=open_id)
+
+    for verb in removeList:
+        temp_obj = UserVerb.objects.get(user=user_obj,verb=verb)
+        temp_obj.delete()
+
+    return HttpResponse('处理成功')
