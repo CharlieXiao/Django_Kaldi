@@ -447,3 +447,7 @@ def removeVerbList(request):
         temp_obj.delete()
 
     return HttpResponse('处理成功')
+
+def judgeAudio(request):
+    print(request.POST)
+    return HttpResponse('服务器处理中')
