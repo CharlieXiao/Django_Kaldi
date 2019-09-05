@@ -190,6 +190,9 @@ def getSentenceInfo(request):
         index = 1
 
         for obj in objs:
+
+            # 判断用户是否有历史录音
+            # user_audio = obj.useraudio_set.filter(user=user_obj)
                 
             # print(obj.sentence_src)
             # 如果是默认录音，则连接有道进行更新
@@ -422,7 +425,7 @@ def getVerbList(request):
 
             temp_obj = {
                 'verb':temp_verb.verb,
-                'id':temp_verb.id,
+                'id':obj.id,
                 'phonetic':temp_verb.us_phonetic,
                 'trans':{
                     'pos':explain.pos,
@@ -438,51 +441,52 @@ def getVerbList(request):
 
 def removeVerbList(request):
     removeList = json.loads(request.GET['removeList'])
-    open_id = request.GET['open_id']
-
-    user_obj = User.objects.get(open_id=open_id)
 
     for verb in removeList:
-        temp_obj = UserVerb.objects.get(user=user_obj,verb=verb)
+        temp_obj = UserVerb.objects.get(id=verb)
         temp_obj.delete()
 
     return HttpResponse('处理成功')
 
 def judgeAudio(request):
-    #print(request.POST)
-    #使用DJango作为微信小程序后端，需要禁用Django的CSRF cookie监测
-    open_id = request.POST['open_id']
-    sentence_id = int(request.POST['sentence_id'])
-    # 采用read直接读取二进制文件，对于较大文件不便使用，但此处用户录音一般不超过一分钟，可以使用
-    user_audio = ContentFile(request.FILES['audio'].read())
+    if request.method == 'POST':
+        # 必须是post请求
+        #print(request.POST)
+        #使用DJango作为微信小程序后端，需要禁用Django的CSRF cookie监测
+        open_id = request.POST['open_id']
+        sentence_id = int(request.POST['sentence_id'])
+        # 采用read直接读取二进制文件，对于较大文件不便使用，但此处用户录音一般不超过一分钟，可以使用
+        user_audio = ContentFile(request.FILES['audio'].read())
 
-    user_obj = User.objects.get(open_id=open_id)
+        user_obj = User.objects.get(open_id=open_id)
 
-    sentence_obj = Sentence.objects.get(id=sentence_id)
+        sentence_obj = Sentence.objects.get(id=sentence_id)
 
-    # score = getScore()
+        # score = getScore()
 
-    score = 80
+        score = 80
 
-    try:
-        ua_obj = UserAudio.objects.get(user=user_obj,sentence=sentence_obj)
-        # 删除过去的发音，并替换
-        ua_obj.audio.delete()
-        ua_obj.audio.save('{}_{}.mp3'.format(user_obj.id,sentence_obj.id),user_audio)
-        ua_obj.score = score
-        ua_obj.save()
-        print('用户以前发音过')
-    except ObjectDoesNotExist:
-        print('用户第一次发音')
-        ua_obj = UserAudio.objects.create(user=user_obj,sentence=sentence_obj,score=score)
-        ua_obj.audio.save('{}_{}.mp3'.format(user_obj.id,sentence_id),user_audio)
-        #ua_obj.save()
+        try:
+            ua_obj = UserAudio.objects.get(user=user_obj,sentence=sentence_obj)
+            # 删除过去的发音，并替换
+            ua_obj.audio.delete()
+            ua_obj.audio.save('{}_{}.mp3'.format(user_obj.id,sentence_obj.id),user_audio)
+            ua_obj.score = score
+            ua_obj.save()
+            print('用户以前发音过')
+        except ObjectDoesNotExist:
+            print('用户第一次发音')
+            ua_obj = UserAudio.objects.create(user=user_obj,sentence=sentence_obj,score=score)
+            ua_obj.audio.save('{}_{}.mp3'.format(user_obj.id,sentence_id),user_audio)
+            #ua_obj.save()
 
-    res = {
-        'score':score
-    }
+        res = {
+            'score':score
+        }
 
-    return HttpResponse(json.dumps(res))
+        return HttpResponse(json.dumps(res))
+    else:
+        return HttpResponse('ERROR: 403')
 
 def getAudioList(request):
     open_id = request.GET['open_id']
@@ -493,47 +497,38 @@ def getAudioList(request):
 
     res_obj = {}
 
-    # 判断用户是否有收藏过单词
+    # 判断用户是否有过录音
     if len(va_objs) == 0:
         res_obj['hasAudio'] = False
     else:
-        print('用户有收藏过单词嗷')
+        print('用户有录音嗷')
 
         res_obj['hasAudio'] = True
 
         res_obj['AudioList'] = []
 
         for obj in va_objs:
-            temp_sentence = obj.sentence
-
-            # 对于explain需要用正则表达式获取其第一个解释的第一个
-
-            explain = temp_sentence.verbexplain_set.all()[0]
 
             temp_obj = {
-                'verb':temp_verb.verb,
-                'id':temp_verb.id,
-                'phonetic':temp_verb.us_phonetic,
-                'trans':{
-                    'pos':explain.pos,
-                    'explain':explain.explain.split('；')[0]
-                },
-                'speech':request_url+temp_verb.us_speech.url,
+                'id':obj.id,
+                'sentence_en':obj.sentence.sentence_en,
+                'src':request_url+obj.audio.url,
+                'score':obj.score,
+                'course':obj.sentence.section.course.name,
                 'notRemove':True,
             }
 
-            res_obj['verbList'].append(temp_obj)
+            res_obj['AudioList'].append(temp_obj)
+    
+    print(res_obj)
 
     return HttpResponse(json.dumps(res_obj))
 
 def removeAudioList(request):
     removeList = json.loads(request.GET['removeList'])
-    open_id = request.GET['open_id']
 
-    user_obj = User.objects.get(open_id=open_id)
-
-    for verb in removeList:
-        temp_obj = UserVerb.objects.get(user=user_obj,verb=verb)
+    for sentence in removeList:
+        temp_obj = UserAudio.objects.get(id=sentence)
         temp_obj.delete()
 
     return HttpResponse('处理成功')

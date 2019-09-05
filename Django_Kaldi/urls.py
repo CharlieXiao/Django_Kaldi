@@ -32,4 +32,6 @@ urlpatterns = [
     path('VerbList/',ks_views.getVerbList),
     path('removeVerbList/',ks_views.removeVerbList),
     path('judgeAudio/',ks_views.judgeAudio),
+    path('AudioList/',ks_views.getAudioList),
+    path('removeAudioList/',ks_views.removeAudioList),
 ] + static(settings.MEDIA_URL, document_root = settings.MEDIA_ROOT)
