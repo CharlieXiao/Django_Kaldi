@@ -13,7 +13,7 @@ import os
 import requests
 import datetime
 
-request_url = 'http://127.0.0.1:8000'
+request_url = 'https://kaldi-speech.cn'
 
 
 # Create your views here.
