@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from django.http import HttpResponse
-from Kaldi_speech.models import EveryDayMotto, Course, Section, Sentence, Verb, VerbExplain,User,UserCourse,UserVerb,UserAudio
+from Kaldi_speech.models import EveryDayMotto, Course, Section, Sentence, Verb, VerbExplain,User,UserCourse,UserVerb,UserSentence
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from YouDaoAPI.text_translation import getTrans
@@ -13,8 +13,9 @@ import os
 import requests
 import datetime
 
-request_url = 'https://kaldi-speech.cn'
+# request_url = 'https://kaldi-speech.cn'
 
+request_url = 'http://127.0.0.1:8000'
 
 # Create your views here.
 
@@ -30,8 +31,17 @@ def Index(request):
 
     curr_date = datetime.date(td.year,td.month,td.day)
 
+    # 只要用户点进小程序，即算学习一天
+    # 获取当前时间，比对，不相同则learn-days加一天
+
     # 计算用户学习天数
-    learn_days = (curr_date-user_obj.add_time).days
+    # 此处还有待商榷，应计算实际学习天数
+    # 应该是用户学习某个课程后才算实际学习天数
+    # learn_days = (curr_date-user_obj.add_time).days
+
+    if curr_date != user_obj.add_time:
+        user_obj.learn_days += 1
+        user_obj.save()
 
     # 实际在首页还会显示用户学习天数等信息，点击开始学习直接进入上次未完成的课程，没有则直接进入课程列表
     # 获得每日格言
@@ -41,7 +51,7 @@ def Index(request):
         'motto':motto.motto,
         'author':motto.author,
         'poster':request_url+motto.poster.url,
-        'learn_days':learn_days,
+        'learn_days':user_obj.learn_days,
     }
 
     return HttpResponse(json.dumps(motto_obj))
@@ -73,7 +83,6 @@ def getCourseInfo(requests):
         })
 
     return HttpResponse(json.dumps(courseInfo))
-
 
 def getSectionInfo(request):
 
@@ -120,7 +129,6 @@ def getSectionInfo(request):
         })
 
     return HttpResponse(json.dumps(sec_obj))
-
 
 def getSentenceInfo(request):
 
@@ -190,11 +198,6 @@ def getSentenceInfo(request):
         index = 1
 
         for obj in objs:
-
-            # 判断用户是否有历史录音
-            # user_audio = obj.useraudio_set.filter(user=user_obj)
-                
-            # print(obj.sentence_src)
             # 如果是默认录音，则连接有道进行更新
             if obj.sentence_src == 'default/default.wav':
                 # 尝试从有道获取句子发音
@@ -215,12 +218,28 @@ def getSentenceInfo(request):
             for i in re.finditer(pattern, obj.sentence_en):
                 sep.append(i.group())
 
+            # 判断用户是否有历史录音
+            try:
+                us_obj = UserSentence.objects.get(user=user_obj,sentence=obj)
+                hasJudge = 1
+                score = us_obj.score
+                user_src = us_obj.audio.url
+            except ObjectDoesNotExist:
+                hasJudge = 0
+                score = 0
+                user_src=''
+                
+            # 需要返回用户历史评分结果和音频url
+
             sen_obj['sentenceInfo'][obj.id] = {
                 'index': index,
                 'en': obj.sentence_en,
                 'ch': obj.sentence_ch,
                 'src': obj.sentence_src.url,
-                'en_sep': sep
+                'en_sep': sep,
+                'score':score,
+                'user-src':user_src,
+                'hasJudge':hasJudge,
             }
 
             index += 1
@@ -279,7 +298,6 @@ def updataStudyStatus(request):
         return HttpResponse('更新成功')
 
     return HttpResponse('服务器维护中')
-
 
 def getVerbTrans(request):
 
@@ -359,6 +377,7 @@ def getVerbTrans(request):
 
     verbData = {
         'verb':verbObj.verb,
+        'verb_id':verbObj.id,
         'uk-phonetic':verbObj.uk_phonetic,
         'us-phonetic':verbObj.us_phonetic,
         'uk-speech':verbObj.uk_speech.url,
@@ -439,6 +458,8 @@ def getVerbList(request):
 
     return HttpResponse(json.dumps(res_obj))
 
+# 是否会出现一个用户删除单词，将所有用户对应的全部删除了？
+# 感觉需要提供用户的open_id，如此能确定一定可以删除对应用户对应收藏的单词
 def removeVerbList(request):
     removeList = json.loads(request.GET['removeList'])
 
@@ -454,35 +475,46 @@ def judgeAudio(request):
         #print(request.POST)
         #使用DJango作为微信小程序后端，需要禁用Django的CSRF cookie监测
         open_id = request.POST['open_id']
-        sentence_id = int(request.POST['sentence_id'])
+        judge_type = request.POST['type']
+        print('Type: {}'.format(judge_type))
         # 采用read直接读取二进制文件，对于较大文件不便使用，但此处用户录音一般不超过一分钟，可以使用
         user_audio = ContentFile(request.FILES['audio'].read())
-
         user_obj = User.objects.get(open_id=open_id)
-
-        sentence_obj = Sentence.objects.get(id=sentence_id)
-
-        # score = getScore()
-
         score = 80
+        user_audio_src = ''
+        # 分为两种评分形式，对单词评分和对句子评分
+        if judge_type == 'verb':
+            # score = getScore()
+            res = {
+                # 对于单词评分，仅需要返评分结果即可
+                'score':80
+            }
+            
+        else:
+            sentence_id = int(request.POST['sentence_id'])
+            sentence_obj = Sentence.objects.get(id=sentence_id)
+            # score = getScore()
+            try:
+                ua_obj = UserSentence.objects.get(user=user_obj,sentence=sentence_obj)
+                # 删除过去的发音，并替换
+                ua_obj.audio.delete()
+                ua_obj.audio.save('{}_{}.mp3'.format(user_obj.id,sentence_id),user_audio)
+                ua_obj.score = score
+                ua_obj.save()
+                print('用户以前发音过')
+            except ObjectDoesNotExist:
+                print('用户第一次发音')
+                ua_obj = UserSentence.objects.create(user=user_obj,sentence=sentence_obj,score=score)
+                ua_obj.audio.save('{}_{}.mp3'.format(user_obj.id,sentence_id),user_audio)
 
-        try:
-            ua_obj = UserAudio.objects.get(user=user_obj,sentence=sentence_obj)
-            # 删除过去的发音，并替换
-            ua_obj.audio.delete()
-            ua_obj.audio.save('{}_{}.mp3'.format(user_obj.id,sentence_obj.id),user_audio)
-            ua_obj.score = score
-            ua_obj.save()
-            print('用户以前发音过')
-        except ObjectDoesNotExist:
-            print('用户第一次发音')
-            ua_obj = UserAudio.objects.create(user=user_obj,sentence=sentence_obj,score=score)
-            ua_obj.audio.save('{}_{}.mp3'.format(user_obj.id,sentence_id),user_audio)
-            #ua_obj.save()
+            user_audio_src = ua_obj.audio.url
 
-        res = {
-            'score':score
-        }
+            res = {
+                'score':score,
+                'user-audio':user_audio_src
+            }
+
+        print(type(json.dumps(res)))
 
         return HttpResponse(json.dumps(res))
     else:
@@ -493,7 +525,7 @@ def getAudioList(request):
 
     user_obj = User.objects.get(open_id=open_id)
 
-    va_objs = user_obj.useraudio_set.all()
+    va_objs = user_obj.usersentence_set.all()
 
     res_obj = {}
 
@@ -528,7 +560,23 @@ def removeAudioList(request):
     removeList = json.loads(request.GET['removeList'])
 
     for sentence in removeList:
-        temp_obj = UserAudio.objects.get(id=sentence)
+        temp_obj = UserSentence.objects.get(id=sentence)
         temp_obj.delete()
 
     return HttpResponse('处理成功')
+
+# 是否需要在数据库中记录是否学习完成，章节是否学习完成，如此较好判别是否学习完成
+def getUserCourse(request):
+    open_id = request.GET['open_id']
+    order = request.GET['order']
+
+    user_obj = User.objects.get(open_id=open_id)
+
+    if order == 'default':
+        course_objs = Course.objects.all()
+    elif order == 'finished':
+        # 已经完成的课程
+        course_objs = Course.objects.order_by('num_learners').reverse()
+    elif order == 'ongoing':
+        # 未完成的课程
+        course_objs = Course.objects.order_by('add_time').reverse()
