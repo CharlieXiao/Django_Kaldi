@@ -32,7 +32,7 @@ class Course(models.Model):
     name = models.CharField(max_length=100, verbose_name="课程名称")
     intro = models.CharField(
         max_length=200, verbose_name="课程介绍", default='写点介绍吧...')
-    num_sections = models.IntegerField(verbose_name="课程章节", default=0)
+    # num_sections = models.IntegerField(verbose_name="课程章节", default=0)
     course_img = models.ImageField(
         upload_to=course_directory_path, verbose_name="课程封面", default='default/default.png')
     num_learners = models.IntegerField(verbose_name="学习人数", default=0)
@@ -47,7 +47,7 @@ class Section(models.Model):
     course = models.ForeignKey("Course", on_delete=models.CASCADE)
     title = models.CharField(max_length=100, verbose_name="章节标题")
     subtitle = models.CharField(max_length=200, verbose_name="章节副标题")
-    num_sentences = models.IntegerField(verbose_name="章节例句数", default=0)
+    # num_sentences = models.IntegerField(verbose_name="章节例句数", default=0)
 
     def __str__(self):
         return '{} - {}'.format(self.course.name, self.title)
@@ -78,7 +78,7 @@ class Verb(models.Model):
     uk_speech = models.FileField(
         upload_to='verb/', verbose_name='英式发音', default='default/default.wav')
     us_speech = models.FileField(
-        upload_to='verb/', verbose_name='没事发音', default='default/default.wav')
+        upload_to='verb/', verbose_name='美式发音', default='default/default.wav')
 
     def __str__(self):
         return self.verb
@@ -101,8 +101,14 @@ class User(models.Model):
     # 保存用户加入时间
     add_time = models.DateField(verbose_name='添加事件', auto_now_add=True)
 
+    # 最后一次学习时间，自动保存为更新时间
+    # 设置为true时，每次执行 save 操作时，将其值设置为当前时间
+    last_learn_time = models.DateField(verbose_name='最后学习时间', auto_now=True)
+
     # 累计学习天数
-    learn_days = models.IntegerField(verbose_name='学习天数',default=0)
+    learn_days = models.IntegerField(verbose_name='学习天数', default=0)
+
+    # 由于一个用户可以学习多个课程，但只有一个是用户当前正在学习的，因此需要记录
 
     # 当前课程，仅记录id
     curr_course = models.IntegerField(
@@ -114,7 +120,7 @@ class User(models.Model):
 
 def useraudio_directory_path(instance, filename):
 
-    return 'user/{}/{}'.format(instance.user.open_id, filename)
+    return 'user/{}/{}'.format(instance.user.id, filename)
 
 
 class UserVerb(models.Model):
@@ -125,20 +131,6 @@ class UserVerb(models.Model):
 
     def __str__(self):
         return '{} : {}'.format(self.user.id, self.verb.verb)
-
-
-class UserSentence(models.Model):
-    user = models.ForeignKey("User", on_delete=models.CASCADE)
-
-    sentence = models.ForeignKey("Sentence", on_delete=models.CASCADE)
-
-    score = models.IntegerField(default=90, verbose_name="得分")
-
-    audio = models.FileField(default='default/default.wav',
-                             upload_to=useraudio_directory_path, verbose_name='用户音频')
-
-    def __str__(self):
-        return '{} : {} {}'.format(self.user.id, self.sentence.id, self.score)
 
 # 设置默认值
 
@@ -159,16 +151,35 @@ class UserCourse(models.Model):
     user = models.ForeignKey("User", on_delete=models.CASCADE)
     # 只要知道当前例句即可对应到当且章节和当前课程
 
-    course = models.ForeignKey(
-        "Course", on_delete=models.CASCADE, default=course_default)
+    course = models.ForeignKey("Course", on_delete=models.CASCADE)
 
     # 只要存储对应课程学习章节的id即可
-    curr_section = models.IntegerField(
-        default=-1, verbose_name='当前章节')
-
-    # 存储对应章节的学习例句
-    curr_sentence = models.IntegerField(
-        default=-1, verbose_name='当前例句')
+    curr_section = models.IntegerField(default=-1, verbose_name='当前章节')
 
     def __str__(self):
-        return '{} : {} -> {} -> {}'.format(self.user.open_id, self.course.name, self.curr_section, self.curr_sentence)
+        return '{} : {} -> {}'.format(self.user.id, self.course.name, self.curr_section)
+
+
+class UserSection(models.Model):
+    user = models.ForeignKey("User", on_delete=models.CASCADE)
+
+    section = models.ForeignKey("Section", on_delete=models.CASCADE)
+
+    curr_sentence = models.IntegerField(default=-1, verbose_name='当前例句')
+
+    def __str__(self):
+        return '{} : {} -> {}'.format(self.user.id, self.section.title, self.curr_sentence)
+
+
+class UserSentence(models.Model):
+    user = models.ForeignKey("User", on_delete=models.CASCADE)
+
+    sentence = models.ForeignKey("Sentence", on_delete=models.CASCADE)
+
+    score = models.IntegerField(default=90, verbose_name="得分")
+
+    audio = models.FileField(default='default/default.wav',
+                             upload_to=useraudio_directory_path, verbose_name='用户音频')
+
+    def __str__(self):
+        return '{} : {} {}'.format(self.user.id, self.sentence.id, self.score)
