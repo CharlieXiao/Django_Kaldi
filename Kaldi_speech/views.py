@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from django.http import HttpResponse
-from Kaldi_speech.models import EveryDayMotto, Course, Section, Sentence, Verb, VerbExplain, User, UserCourse, UserVerb, UserSentence
+from Kaldi_speech.models import EveryDayMotto, Course, Section, Sentence, Verb, VerbExplain, User, UserCourse, UserVerb, UserSentence , UserSection
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from YouDaoAPI.text_translation import getTrans
@@ -24,9 +24,20 @@ def Index(request):
 
     open_id = request.GET['open_id']
 
-    print('user open id : {}'.format(open_id))
+    # print('user open id : {}'.format(open_id))
 
     user_obj = User.objects.get(open_id=open_id)
+
+    # 计算用户学习天数
+    td = datetime.datetime.now()
+    curr_date = datetime.date(td.year, td.month, td.day)
+    # 只要用户点进小程序，即算学习一天
+    # 获取当前时间，比对，不相同则learn-days加一天
+    # 比较最后学习时间，如果不在同一天，则不修改
+    if curr_date != user_obj.last_learn_time:
+        print('更新用户学习天数')
+        user_obj.learn_days += 1
+    user_obj.save()
 
     # 实际在首页还会显示用户学习天数等信息，点击开始学习直接进入上次未完成的课程，没有则直接进入课程列表
     # 获得每日格言
@@ -37,6 +48,7 @@ def Index(request):
         'author': motto.author,
         'poster': request_url+motto.poster.url,
         'learn_days': user_obj.learn_days,
+        'curr_course':user_obj.curr_course,
     }
 
     return HttpResponse(json.dumps(motto_obj))
@@ -81,6 +93,11 @@ def getSectionInfo(request):
     section_objs = course_obj.section_set.all()
 
     user_obj = User.objects.get(open_id=open_id)
+
+    # 更新当前课程
+    user_obj.curr_course = course_obj.id
+    user_obj.save()
+    
 
     # 获取当前用户学习情况
     try:
@@ -138,36 +155,11 @@ def getSentenceInfo(request):
         curr_sentence = objs[0].id
         # 更新用户数据和用户课程数据库
         try:
-            uc_obj = UserCourse.objects.get(user=user_obj, course=course_obj)
-            # 此处section_id是字符串类型的，而uc_obj.curr_section是整型，因而不相等
-            if uc_obj.curr_section == section_id:
-                curr_sentence = uc_obj.curr_sentence
-            else:
-                uc_obj.curr_section = section_id
-                uc_obj.curr_sentence = curr_sentence
-                uc_obj.save()
+            us_obj = UserSection.objects.get(user=user_obj,section=section_obj)
+            curr_sentence = us_obj.curr_sentence
         except ObjectDoesNotExist:
-            uc_obj = UserCourse.objects.create(
-                user=user_obj, course=course_obj, curr_section=section_id, curr_sentence=curr_sentence)
-
-        # 更新当前课程
-        user_obj.curr_course = course_obj.id
-
-        td = datetime.datetime.now()
-
-        curr_date = datetime.date(td.year, td.month, td.day)
-
-        # 只要用户点进小程序，即算学习一天
-        # 获取当前时间，比对，不相同则learn-days加一天
-
-        # 计算用户学习天数
-
-        # 比较最后学习时间，如果不在同一天，则不修改
-        if curr_date != user_obj.last_learn_time:
-            print('更新用户学习天数')
-            user_obj.learn_days += 1
-
-        user_obj.save()
+            us_obj = UserSection.objects.create(
+                user=user_obj, section=section_obj,curr_sentence=curr_sentence)
 
         sen_obj['sentenceInfo'] = {}
         sen_obj['sectionInfo'] = {
@@ -282,11 +274,38 @@ def updataStudyStatus(request):
 
     if up_type == '1':
         curr_sentence = request.GET['curr_sentence']
-        uc_obj = UserCourse.objects.get(
-            user=user_obj, course=user_obj.curr_course)
-        print(uc_obj)
-        uc_obj.curr_sentence = curr_sentence
-        uc_obj.save()
+        sen_obj = Sentence.objects.get(id=curr_sentence)
+        sec_obj = sen_obj.section
+        us_obj = UserSection.objects.get(
+            user=user_obj, section=sec_obj)
+        # 可以在此处遍历该章节下所有句子，判断是否完成这一章节
+        is_finish = True
+        for sen in sec_obj.sentence_set.all():
+            try:
+                UserSentence.objects.get(user=user_obj,sentence=sen)
+            except ObjectDoesNotExist:
+                is_finish = False
+                break
+        us_obj.curr_sentence = curr_sentence
+        if is_finish:
+            us_obj.is_finish = is_finish
+        us_obj.save()
+        # 还需要遍历该课程下所有章节，判断这一课程是否完成
+        course_obj = sec_obj.course
+        is_finish = True
+        uc_obj = UserCourse.objects.get(user=user_obj,course=course_obj)
+        for sec in course_obj.section_set.all():
+            try:
+                temp_obj = UserSection.objects.get(user=user_obj,section=sec)
+                if not temp_obj.is_finish:
+                    is_finish = False
+                    break
+            except ObjectDoesNotExist:
+                is_finish = False
+                break
+        if is_finish:
+            uc_obj.is_finish = is_finish
+            uc_obj.save()
         return HttpResponse('更新成功')
 
     return HttpResponse('服务器维护中')
@@ -475,6 +494,7 @@ def judgeAudio(request):
         # 采用read直接读取二进制文件，对于较大文件不便使用，但此处用户录音一般不超过一分钟，可以使用
         user_audio = ContentFile(request.FILES['audio'].read())
         user_obj = User.objects.get(open_id=open_id)
+
         score = 80
         user_audio_src = ''
         # 分为两种评分形式，对单词评分和对句子评分
@@ -512,8 +532,6 @@ def judgeAudio(request):
                 'score': score,
                 'user-audio': user_audio_src
             }
-
-        print(type(json.dumps(res)))
 
         return HttpResponse(json.dumps(res))
     else:

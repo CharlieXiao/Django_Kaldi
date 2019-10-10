@@ -105,8 +105,8 @@ class User(models.Model):
     # 设置为true时，每次执行 save 操作时，将其值设置为当前时间
     last_learn_time = models.DateField(verbose_name='最后学习时间', auto_now=True)
 
-    # 累计学习天数
-    learn_days = models.IntegerField(verbose_name='学习天数', default=0)
+    # 累计学习天数，默认为第一天
+    learn_days = models.IntegerField(verbose_name='学习天数', default=1)
 
     # 由于一个用户可以学习多个课程，但只有一个是用户当前正在学习的，因此需要记录
 
@@ -144,6 +144,7 @@ def course_default():
         # 返回第一个课程
         return objs[0].id
 
+# 添加bool标签判断用户是否学习完课程
 
 class UserCourse(models.Model):
     # 中间表，连接用户数据可和课程数据库
@@ -156,9 +157,12 @@ class UserCourse(models.Model):
     # 只要存储对应课程学习章节的id即可
     curr_section = models.IntegerField(default=-1, verbose_name='当前章节')
 
-    def __str__(self):
-        return '{} : {} -> {}'.format(self.user.id, self.course.name, self.curr_section)
+    is_finish = models.BooleanField(default=False,verbose_name='是否完成')
 
+    def __str__(self):
+        return '{} : {} -> {} | {}'.format(self.user.id, self.course.name, self.curr_section,self.is_finish)
+
+# 添加一个bool标签来判断用户是否已经学习完成这个章节
 
 class UserSection(models.Model):
     user = models.ForeignKey("User", on_delete=models.CASCADE)
@@ -167,8 +171,10 @@ class UserSection(models.Model):
 
     curr_sentence = models.IntegerField(default=-1, verbose_name='当前例句')
 
+    is_finish = models.BooleanField(default=False,verbose_name='是否完成')
+
     def __str__(self):
-        return '{} : {} -> {}'.format(self.user.id, self.section.title, self.curr_sentence)
+        return '{} : {} -> {} | {}'.format(self.user.id, self.section.title, self.curr_sentence,self.is_finish)
 
 
 class UserSentence(models.Model):
