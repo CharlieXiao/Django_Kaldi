@@ -119,15 +119,29 @@ def getSectionInfo(request):
 
     sec_obj['courseSec'] = []
 
+    sec_obj['section_finish'] = []
+
+    prev_finish = True
+
     for sec in section_objs:
+        # 获取用户完成状况
+        try:
+            us_obj = UserSection.objects.get(user=user_obj,section=sec)
+            is_finish = us_obj.is_finish
+        except ObjectDoesNotExist:
+            is_finish = False
+        
+
         sec_obj['courseSec'].append({
             'id': sec.id,
             'title': sec.title,
-            'subtitle': sec.subtitle
+            'subtitle': sec.subtitle,
         })
 
-    return HttpResponse(json.dumps(sec_obj))
+        sec_obj['section_finish'].append(is_finish)
+        
 
+    return HttpResponse(json.dumps(sec_obj))
 
 def getSentenceInfo(request):
 
@@ -149,6 +163,11 @@ def getSentenceInfo(request):
     course_obj = Course.objects.get(id=section_obj.course.id)
 
     objs = section_obj.sentence_set.all()
+
+    # 更新当前章节
+    uc_obj = UserCourse.objects.get(user=user_obj,course=course_obj)
+    uc_obj.curr_section = section_obj.id
+    uc_obj.save()
 
     # 例句数不为0
     if len(objs) != 0:
@@ -279,34 +298,40 @@ def updataStudyStatus(request):
         us_obj = UserSection.objects.get(
             user=user_obj, section=sec_obj)
         # 可以在此处遍历该章节下所有句子，判断是否完成这一章节
-        is_finish = True
+        sec_finish = True
         for sen in sec_obj.sentence_set.all():
             try:
                 UserSentence.objects.get(user=user_obj,sentence=sen)
             except ObjectDoesNotExist:
-                is_finish = False
+                sec_finish = False
                 break
         us_obj.curr_sentence = curr_sentence
-        if is_finish:
-            us_obj.is_finish = is_finish
+        if sec_finish:
+            us_obj.is_finish = sec_finish
         us_obj.save()
         # 还需要遍历该课程下所有章节，判断这一课程是否完成
         course_obj = sec_obj.course
-        is_finish = True
+        course_finish = True
         uc_obj = UserCourse.objects.get(user=user_obj,course=course_obj)
-        for sec in course_obj.section_set.all():
+        sec_objs = course_obj.section_set.all()
+
+        section_finish = []
+
+        for sec in sec_objs:
             try:
                 temp_obj = UserSection.objects.get(user=user_obj,section=sec)
+                section_finish.append(temp_obj.is_finish)
                 if not temp_obj.is_finish:
-                    is_finish = False
-                    break
+                    course_finish = False
             except ObjectDoesNotExist:
-                is_finish = False
-                break
-        if is_finish:
-            uc_obj.is_finish = is_finish
+                section_finish.append(False)
+                course_finish = False
+        if course_finish:
+            uc_obj.is_finish = course_finish
+            # 需要修正curr_course
             uc_obj.save()
-        return HttpResponse('更新成功')
+        # 返回对应课程完成信息
+        return HttpResponse(json.dumps(section_finish))
 
     return HttpResponse('服务器维护中')
 
@@ -570,7 +595,7 @@ def getAudioList(request):
 
             res_obj['AudioList'].append(temp_obj)
 
-    print(res_obj)
+    # print(res_obj)
 
     return HttpResponse(json.dumps(res_obj))
 
@@ -586,18 +611,43 @@ def removeAudioList(request):
 
 # 是否需要在数据库中记录是否学习完成，章节是否学习完成，如此较好判别是否学习完成
 
-
 def getUserCourse(request):
     open_id = request.GET['open_id']
     order = request.GET['order']
 
     user_obj = User.objects.get(open_id=open_id)
 
-    if order == 'default':
-        course_objs = Course.objects.all()
-    elif order == 'finished':
+    if order == '1':
+        course_objs = UserCourse.objects.filter(user=user_obj)
+    elif order == '2':
         # 已经完成的课程
-        course_objs = Course.objects.order_by('num_learners').reverse()
-    elif order == 'ongoing':
+        course_objs = UserCourse.objects.filter(user=user_obj,is_finish = False)
+    elif order == '3':
         # 未完成的课程
-        course_objs = Course.objects.order_by('add_time').reverse()
+        course_objs = UserCourse.objects.filter(user=user_obj,is_finish = True)
+
+    courseInfo = []
+
+    for uc_obj in course_objs:
+        section_set = uc_obj.course.section_set.all()
+        num_finish = 0
+        if uc_obj.is_finish:
+            num_finish = len(section_set)
+        else:
+            for sec in section_set:
+                if uc_obj.curr_section != sec.id:
+                    num_finish += 1
+                else:
+                    break
+        
+        courseInfo.append({
+            'id':uc_obj.course.id,
+            'name':uc_obj.course.name,
+            'img':request_url+uc_obj.course.course_img.url,
+            'curr':num_finish,
+            'total':len(section_set),
+        })
+
+    return HttpResponse(json.dumps(courseInfo))
+    
+
