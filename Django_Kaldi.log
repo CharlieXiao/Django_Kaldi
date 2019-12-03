@@ -1232,3 +1232,7 @@ ValueError: invalid literal for int() with base 10: 'undefined'
 [pid: 24488|app: 0|req: 41/74] 222.178.10.129 () {52 vars in 998 bytes} [Tue Dec  3 14:18:38 2019] GET /index/?open_id=oPmHU5KDpCe94Yzr-kTtJ6ppgPLA => generated 154 bytes in 11 msecs (HTTP/1.1 200) 3 headers in 109 bytes (1 switches on core 3)
 [pid: 24488|app: 0|req: 42/75] 222.178.10.129 () {52 vars in 1035 bytes} [Tue Dec  3 14:18:38 2019] GET /SentenceInfo?section_id=3&open_id=oPmHU5KDpCe94Yzr-kTtJ6ppgPLA => generated 0 bytes in 0 msecs (HTTP/1.1 301) 3 headers in 169 bytes (2 switches on core 0)
 [pid: 24488|app: 0|req: 43/76] 222.178.10.129 () {52 vars in 1037 bytes} [Tue Dec  3 14:18:38 2019] GET /SentenceInfo/?section_id=3&open_id=oPmHU5KDpCe94Yzr-kTtJ6ppgPLA => generated 2083 bytes in 21 msecs (HTTP/1.1 200) 3 headers in 110 bytes (2 switches on core 1)
+Not Found: /
+[pid: 24488|app: 0|req: 44/77] 49.235.188.239 () {42 vars in 807 bytes} [Tue Dec  3 14:27:30 2019] GET / => generated 3744 bytes in 4 msecs (HTTP/1.1 404) 3 headers in 102 bytes (1 switches on core 2)
+Not Found: /index.php
+[pid: 24488|app: 0|req: 45/78] 49.235.188.239 () {42 vars in 835 bytes} [Tue Dec  3 14:27:30 2019] GET /index.php => generated 3789 bytes in 3 msecs (HTTP/1.1 404) 3 headers in 102 bytes (1 switches on core 3)
