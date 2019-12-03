@@ -1,0 +1,130 @@
+{
+    "score": 96,
+    "sentence": [
+        {
+            "verb": "what",
+            "phones": [
+                {
+                    "phone": "W",
+                    "level": 1
+                },
+                {
+                    "phone": "AH",
+                    "level": 1
+                },
+                {
+                    "phone": "T",
+                    "level": 1
+                }
+            ],
+            "isBad": false,
+            "BadPhoneList": []
+        },
+        {
+            "verb": "makes",
+            "phones": [
+                {
+                    "phone": "M",
+                    "level": 1
+                },
+                {
+                    "phone": "EY",
+                    "level": 1
+                },
+                {
+                    "phone": "K",
+                    "level": 1
+                },
+                {
+                    "phone": "S",
+                    "level": 1
+                }
+            ],
+            "isBad": false,
+            "BadPhoneList": []
+        },
+        {
+            "verb": "the",
+            "phones": [
+                {
+                    "phone": "DH",
+                    "level": 1
+                },
+                {
+                    "phone": "AH",
+                    "level": 1
+                }
+            ],
+            "isBad": false,
+            "BadPhoneList": []
+        },
+        {
+            "verb": "desert",
+            "phones": [
+                {
+                    "phone": "D",
+                    "level": 1
+                },
+                {
+                    "phone": "IH",
+                    "level": 3
+                },
+                {
+                    "phone": "Z",
+                    "level": 1
+                },
+                {
+                    "phone": "ER",
+                    "level": 1
+                },
+                {
+                    "phone": "T",
+                    "level": 2
+                }
+            ],
+            "isBad": true,
+            "BadPhoneList": [
+                1
+            ]
+        },
+        {
+            "verb": "beautiful",
+            "phones": [
+                {
+                    "phone": "B",
+                    "level": 1
+                },
+                {
+                    "phone": "Y",
+                    "level": 1
+                },
+                {
+                    "phone": "UW",
+                    "level": 1
+                },
+                {
+                    "phone": "T",
+                    "level": 1
+                },
+                {
+                    "phone": "AH",
+                    "level": 1
+                },
+                {
+                    "phone": "F",
+                    "level": 1
+                },
+                {
+                    "phone": "AH",
+                    "level": 1
+                },
+                {
+                    "phone": "L",
+                    "level": 1
+                }
+            ],
+            "isBad": false,
+            "BadPhoneList": []
+        }
+    ]
+}

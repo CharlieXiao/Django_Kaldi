@@ -155,7 +155,7 @@ def getSentenceInfo(request):
 
     sen_obj = {}
 
-    pattern = r'\w+\'\w+|\w+-\w+|[\.\,\;\?\!\-\:\(\)\'\"]+|\w+'
+    # pattern = r'\w+\'\w+|\w+-\w+|[\.\,\;\?\!\-\:\(\)\'\"]+|\w+'
 
     user_obj = User.objects.get(open_id=open_id)
 
@@ -214,10 +214,18 @@ def getSentenceInfo(request):
                     # verbObj.uk_speech.save(verb+'_uk.mp3', uk_file)
                     # print(audio_url)
 
-            sep = []
+            # sep = []
             # 采用正则表达式对拆分英文单词，便于单词释义查询
-            for i in re.finditer(pattern, obj.sentence_en):
-                sep.append(i.group())
+            # for i in re.finditer(pattern, obj.sentence_en):
+            #     sep.append(i.group())
+            sep = []
+            for verb in obj.sentence_en.split(' '):
+                sep.append({
+                    'verb':verb,
+                    'isBad':False
+                })
+
+            # sep = json.load(open("C:\\Users\\mayn\\Documents\\Django_Kaldi\\test.json",'r',encoding='utf-8'))['sentence']
 
             # 判断用户是否有历史录音
             try:
@@ -518,23 +526,23 @@ def judgeAudio(request):
         judge_type = request.POST['type']
         print('Type: {}'.format(judge_type))
         # 采用read直接读取二进制文件，对于较大文件不便使用，但此处用户录音一般不超过一分钟，可以使用
+        # 尝试直接保存用户发音
         user_audio = ContentFile(request.FILES['audio'].read())
         user_obj = User.objects.get(open_id=open_id)
 
-        score = 80
+        score = 0
         user_audio_src = ''
         # 分为两种评分形式，对单词评分和对句子评分
         if judge_type == 'verb':
             # score = getScore()
             res = {
                 # 对于单词评分，仅需要返评分结果即可
-                'score': 80
+                'score': 0
             }
 
         else:
             sentence_id = int(request.POST['sentence_id'])
             sentence_obj = Sentence.objects.get(id=sentence_id)
-            # score = getScore()
             try:
                 ua_obj = UserSentence.objects.get(
                     user=user_obj, sentence=sentence_obj)
@@ -542,8 +550,6 @@ def judgeAudio(request):
                 ua_obj.audio.delete()
                 ua_obj.audio.save('{}_{}.mp3'.format(
                     user_obj.id, sentence_id), user_audio)
-                ua_obj.score = score
-                ua_obj.save()
                 print('用户以前发音过')
             except ObjectDoesNotExist:
                 print('用户第一次发音')
@@ -556,14 +562,15 @@ def judgeAudio(request):
             FileName = '{}_{}'.format(user_obj.id,sentence_id)
             res = {}
             res = get_score('/home/ubuntu/kaldi/egs/gop-compute',FileName,ua_obj.audio.path,sentence_obj.sentence_en.upper())
-            print(res)
             if res == -1:
-                return HttpResponse(json.dumps({'error_code':-1}))
+                return HttpResponse(json.dumps({'error_code':50}))
+            ua_obj.score = res['score']
+            ua_obj.save()
             res['user-audio']= user_audio_src
             res['error_code'] = 0
         return HttpResponse(json.dumps(res))
     else:
-        return HttpResponse('ERROR: 403')
+        return HttpResponse(json.dumps({'error_code':99}))
 
 
 def getAudioList(request):

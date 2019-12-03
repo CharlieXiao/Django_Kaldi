@@ -148,10 +148,10 @@ def get_score(GopPath, FileName, FileSrc, Text, langModel='lang3', acousticModel
             # just one pronounciation
             if len(res) == 1:
                 sentence.append({
-                    'verb': verb,
+                    'verb': verb.lower(),
                     'phones': res[0],
                     'isBad':False,
-                    'BadPhoneList':[]
+                    'BadPhoneList':[],
                 })
                 verb_boundry.append(len(res[0])-1)
             else:
@@ -160,10 +160,10 @@ def get_score(GopPath, FileName, FileSrc, Text, langModel='lang3', acousticModel
                 for verb_phones in res:
                     if is_match(phone_list, verb_phones):
                         sentence.append({
-                            'verb': verb,
+                            'verb': verb.lower(),
                             'phones': verb_phones,
                             'isBad':False,
-                            'BadPhoneList':[]
+                            'BadPhoneList':[],
                         })
                         verb_boundry.append(len(verb_phones)-1)
                         has_match = True
