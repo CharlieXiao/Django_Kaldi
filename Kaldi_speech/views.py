@@ -6,6 +6,7 @@ from django.core.files.storage import default_storage
 from YouDaoAPI.text_translation import getTrans
 from YouDaoAPI.text2speech import getSpeech
 from django.core.exceptions import ObjectDoesNotExist
+from Score.score import get_score
 
 import re
 import json
@@ -13,9 +14,9 @@ import os
 import requests
 import datetime
 
-# request_url = 'https://kaldi-speech.cn'
+request_url = 'https://kaldi-speech.cn'
 
-request_url = 'http://127.0.0.1:8000'
+#request_url = 'http://127.0.0.1:8000'
 
 # Create your views here.
 
@@ -552,12 +553,14 @@ def judgeAudio(request):
                     user_obj.id, sentence_id), user_audio)
 
             user_audio_src = ua_obj.audio.url
-
-            res = {
-                'score': score,
-                'user-audio': user_audio_src
-            }
-
+            FileName = '{}_{}'.format(user_obj.id,sentence_id)
+            res = {}
+            res = get_score('/home/ubuntu/kaldi/egs/gop-compute',FileName,ua_obj.audio.path,sentence_obj.sentence_en.upper())
+            print(res)
+            if res == -1:
+                return HttpResponse(json.dumps({'error_code':-1}))
+            res['user-audio']= user_audio_src
+            res['error_code'] = 0
         return HttpResponse(json.dumps(res))
     else:
         return HttpResponse('ERROR: 403')
