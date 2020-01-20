@@ -146,31 +146,22 @@ def get_score(GopPath, FileName, FileSrc, Text, langModel='lang3', acousticModel
         for verb in TextSep:
             res = verb_dic[verb]
             # just one pronounciation
-            if len(res) == 1:
-                sentence.append({
-                    'verb': verb.lower(),
-                    'phones': res[0],
-                    'isBad':False,
-                    'BadPhoneList':[],
-                })
-                verb_boundry.append(len(res[0])-1)
-            else:
-                # check if the pornounciation is in the phone_list
-                has_match = False
-                for verb_phones in res:
-                    if is_match(phone_list, verb_phones):
-                        sentence.append({
-                            'verb': verb.lower(),
-                            'phones': verb_phones,
-                            'isBad':False,
-                            'BadPhoneList':[],
-                        })
-                        verb_boundry.append(len(verb_phones)-1)
-                        has_match = True
-                        break
-                # after all the iteration, still not found, error
-                if not has_match:
-                    return -1
+            # check if the pornounciation is in the phone_list
+            has_match = False
+            for verb_phones in res:
+                if is_match(phone_list, verb_phones):
+                    sentence.append({
+                        'verb': verb.lower(),
+                        'phones': verb_phones,
+                        'isBad':False,
+                        'BadPhoneList':[],
+                    })
+                    verb_boundry.append(len(verb_phones)-1)
+                    has_match = True
+                    break
+            # after all the iteration, still not found, error
+            if not has_match:
+                return -1
 
         CntLevel1 = 0
         CntLevel2 = 0

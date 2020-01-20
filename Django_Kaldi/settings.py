@@ -12,9 +12,14 @@ https://docs.djangoproject.com/en/2.2/ref/settings/
 
 import os
 
+# get the root directory of this project
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
+
+# this means ../../
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# this means .../../../
+FILE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/2.2/howto/deployment/checklist/
@@ -79,7 +84,8 @@ WSGI_APPLICATION = 'Django_Kaldi.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        # set the database file path
+        'NAME': os.path.join(FILE_DIR, 'db.sqlite3'),
     }
 }
 
@@ -122,11 +128,13 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
-STATIC_ROOT = os.path.join(BASE_DIR,'static')
+# 需要指定为绝对路径
+
+STATIC_ROOT = os.path.join(FILE_DIR,'static')
 
 # 配置 MEDIA_ROOT 作为上传文件在服务器中的基本路径
 
-MEDIA_ROOT = os.path.join(BASE_DIR,'media')
+MEDIA_ROOT = os.path.join(FILE_DIR,'media')
 
 # 配置 MEDIA_URL 作为公用URL，指向上传文件的基本路径
 

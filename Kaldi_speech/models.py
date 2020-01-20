@@ -62,13 +62,14 @@ class Sentence(models.Model):
     section = models.ForeignKey("Section", on_delete=models.CASCADE)
     sentence_en = models.CharField(max_length=200, verbose_name="英文例句")
     sentence_ch = models.CharField(max_length=200, verbose_name="中文释义")
+    sentence_upper = models.CharField(max_length=200,verbose_name="不带标点大写[无需填写]",default="@default")
     sentence_src = models.FileField(
         upload_to=section_directory_path, verbose_name="例句音频", default='default/default.wav')
 
     # 期望直接在创建models对象时直接连接有道云查询相关句子发音
 
     def __str__(self):
-        return self.section.title+" "+self.sentence_en
+        return self.section.title+"->"+self.sentence_en
 
 
 class Verb(models.Model):

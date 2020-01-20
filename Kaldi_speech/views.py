@@ -7,6 +7,7 @@ from YouDaoAPI.text_translation import getTrans
 from YouDaoAPI.text2speech import getSpeech
 from django.core.exceptions import ObjectDoesNotExist
 from Score.score import get_score
+from Django_Kaldi.settings import MEDIA_ROOT
 
 import re
 import json
@@ -14,44 +15,46 @@ import os
 import requests
 import datetime
 
-request_url = 'https://kaldi-speech.cn'
-
-#request_url = 'http://127.0.0.1:8000'
-
 # Create your views here.
-
+GOP_ROOT = '/home/ubuntu/kaldi/egs/gop-compute'
 
 def Index(request):
 
-    open_id = request.GET['open_id']
+    motto_obj = None
 
-    # print('user open id : {}'.format(open_id))
+    try:
+        open_id = request.GET['open_id']
 
-    user_obj = User.objects.get(open_id=open_id)
+        # print('user open id : {}'.format(open_id))
 
-    # 计算用户学习天数
-    td = datetime.datetime.now()
-    curr_date = datetime.date(td.year, td.month, td.day)
-    # 只要用户点进小程序，即算学习一天
-    # 获取当前时间，比对，不相同则learn-days加一天
-    # 比较最后学习时间，如果不在同一天，则不修改
-    if curr_date != user_obj.last_learn_time:
-        print('更新用户学习天数')
-        user_obj.learn_days += 1
-    user_obj.save()
+        user_obj = User.objects.get(open_id=open_id)
 
-    # 实际在首页还会显示用户学习天数等信息，点击开始学习直接进入上次未完成的课程，没有则直接进入课程列表
-    # 获得每日格言
-    motto = EveryDayMotto.objects.get(id=1)
+        # 计算用户学习天数
+        td = datetime.datetime.now()
+        curr_date = datetime.date(td.year, td.month, td.day)
+        # 只要用户点进小程序，即算学习一天
+        # 获取当前时间，比对，不相同则learn-days加一天
+        # 比较最后学习时间，如果不在同一天，则不修改
+        if curr_date != user_obj.last_learn_time:
+            print('更新用户学习天数')
+            user_obj.learn_days += 1
+        user_obj.save()
 
-    motto_obj = {
-        'motto': motto.motto,
-        'author': motto.author,
-        'poster': request_url+motto.poster.url,
-        'learn_days': user_obj.learn_days,
-        'curr_course':user_obj.curr_course,
-    }
+        # 实际在首页还会显示用户学习天数等信息，点击开始学习直接进入上次未完成的课程，没有则直接进入课程列表
+        # 获得每日格言
+        motto = EveryDayMotto.objects.all()[0]
 
+        motto_obj = {
+            'motto': motto.motto,
+            'author': motto.author,
+            'poster': motto.poster.url,
+            'learn_days': user_obj.learn_days,
+            'curr_course':user_obj.curr_course,
+        }
+    except:
+        motto_obj = {
+            'error':400
+        }
     return HttpResponse(json.dumps(motto_obj))
 
 
@@ -75,7 +78,7 @@ def getCourseInfo(requests):
             'id': obj.id,
             'name': obj.name,
             'num_sections': len(obj.section_set.all()),
-            'img': request_url+obj.course_img.url,
+            'img': obj.course_img.url,
         })
 
     return HttpResponse(json.dumps(courseInfo))
@@ -498,7 +501,7 @@ def getVerbList(request):
                     'pos': explain.pos,
                     'explain': explain.explain.split('；')[0]
                 },
-                'speech': request_url+temp_verb.us_speech.url,
+                'speech': temp_verb.us_speech.url,
                 'notRemove': True,
             }
 
@@ -535,10 +538,20 @@ def judgeAudio(request):
         # 分为两种评分形式，对单词评分和对句子评分
         if judge_type == 'verb':
             # score = getScore()
-            res = {
-                # 对于单词评分，仅需要返评分结果即可
-                'score': 0
-            }
+            # try save audio file
+            verb_id = int(request.POST['verb_id'])
+            verb_obj = Verb.objects.get(id=verb_id)
+            
+            audio_file_path = os.path.join(MEDIA_ROOT,'temp','temp_verb.mp3')
+            with open(audio_file_path,'wb') as audio_file:
+                audio_file.write(request.FILES['audio'].read())
+            audio_file.close()
+            
+            res = get_score(GOP_ROOT,'temp_verb',audio_file_path,verb_obj.verb.upper())
+
+            if res == -1:
+                return HttpResponse(json.dumps({'error_code':50}))
+            res['error_code'] = 0
 
         else:
             sentence_id = int(request.POST['sentence_id'])
@@ -547,7 +560,10 @@ def judgeAudio(request):
                 ua_obj = UserSentence.objects.get(
                     user=user_obj, sentence=sentence_obj)
                 # 删除过去的发音，并替换
+                temp_path = ua_obj.audio.path
                 ua_obj.audio.delete()
+                # 最好是将原来的发音清除
+                # os.system('rm {}'.format(temp_path))
                 ua_obj.audio.save('{}_{}.mp3'.format(
                     user_obj.id, sentence_id), user_audio)
                 print('用户以前发音过')
@@ -560,14 +576,28 @@ def judgeAudio(request):
 
             user_audio_src = ua_obj.audio.url
             FileName = '{}_{}'.format(user_obj.id,sentence_id)
-            res = {}
-            res = get_score('/home/ubuntu/kaldi/egs/gop-compute',FileName,ua_obj.audio.path,sentence_obj.sentence_en.upper())
+            # 需要提前对例句进行处理，去除所有标点符号
+            # 建议在添加例句时就对例句进行处理
+            # 添加一个数据像：sentence_en_upper
+            # 但添加时就对数据进行处理
+            if sentence_obj.sentence_upper == '@default':
+                # 对例句进行处理，去除标点并转为大写
+                verb_pattern = re.compile('[A-Za-z\']+')
+                print(sentence_obj.sentence_en)
+                verb_list = verb_pattern.findall(sentence_obj.sentence_en)
+                sentence_upper = ' '.join(verb_list)
+                sentence_obj.sentence_upper = sentence_upper.upper()
+                sentence_obj.save()
+            print(sentence_obj.sentence_upper)
+            res = get_score(GOP_ROOT,FileName,ua_obj.audio.path,sentence_obj.sentence_upper)
+            # res = -1
             if res == -1:
                 return HttpResponse(json.dumps({'error_code':50}))
             ua_obj.score = res['score']
             ua_obj.save()
             res['user-audio']= user_audio_src
             res['error_code'] = 0
+
         return HttpResponse(json.dumps(res))
     else:
         return HttpResponse(json.dumps({'error_code':99}))
@@ -597,7 +627,7 @@ def getAudioList(request):
             temp_obj = {
                 'id': obj.id,
                 'sentence_en': obj.sentence.sentence_en,
-                'src': request_url+obj.audio.url,
+                'src': obj.audio.url,
                 'score': obj.score,
                 'course': obj.sentence.section.course.name,
                 'notRemove': True,
@@ -653,7 +683,7 @@ def getUserCourse(request):
         courseInfo.append({
             'id':uc_obj.course.id,
             'name':uc_obj.course.name,
-            'img':request_url+uc_obj.course.course_img.url,
+            'img':uc_obj.course.course_img.url,
             'curr':num_finish,
             'total':len(section_set),
         })
