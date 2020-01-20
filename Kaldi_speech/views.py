@@ -533,7 +533,9 @@ def judgeAudio(request):
         print('Type: {}'.format(judge_type))
         # 采用read直接读取二进制文件，对于较大文件不便使用，但此处用户录音一般不超过一分钟，可以使用
         # 尝试直接保存用户发音
-        user_audio = ContentFile(request.FILES['audio'].read())
+        # user_audio = ContentFile(request.FILES['audio'].read())
+        user_audio = request.FILES['audio'].read()
+        print('audio file size:{}'.format(len(user_audio)))
         user_obj = User.objects.get(open_id=open_id)
 
         score = 0
@@ -546,8 +548,10 @@ def judgeAudio(request):
             verb_obj = Verb.objects.get(id=verb_id)
             
             audio_file_path = os.path.join(MEDIA_ROOT,'temp','temp_verb.mp3')
+            # 这里收到的文件大小为0，有问题
+            print('audio file size: {}'.format(len(user_audio)))
             with open(audio_file_path,'wb') as audio_file:
-                audio_file.write(request.FILES['audio'].read())
+                audio_file.write(user_audio)
             audio_file.close()
             
             res = get_score(GOP_ROOT,'temp_verb',audio_file_path,verb_obj.verb.upper())
@@ -568,14 +572,14 @@ def judgeAudio(request):
                 # 最好是将原来的发音清除
                 # os.system('rm {}'.format(temp_path))
                 ua_obj.audio.save('{}_{}.mp3'.format(
-                    user_obj.id, sentence_id), user_audio)
+                    user_obj.id, sentence_id), ContentFile(user_audio))
                 print('用户以前发音过')
             except ObjectDoesNotExist:
                 print('用户第一次发音')
                 ua_obj = UserSentence.objects.create(
                     user=user_obj, sentence=sentence_obj, score=score)
                 ua_obj.audio.save('{}_{}.mp3'.format(
-                    user_obj.id, sentence_id), user_audio)
+                    user_obj.id, sentence_id), ContentFile(user_audio))
 
             user_audio_src = ua_obj.audio.url
             FileName = '{}_{}'.format(user_obj.id,sentence_id)
