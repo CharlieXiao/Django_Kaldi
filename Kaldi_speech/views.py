@@ -222,11 +222,14 @@ def getSentenceInfo(request):
             # for i in re.finditer(pattern, obj.sentence_en):
             #     sep.append(i.group())
             sep = []
-            for verb in obj.sentence_en.split(' '):
+            # 此处需要使用正则表达式筛选单词
+            for verb in re.findall('[~`!@#$%^&*()_\-+={}\[\]\|\\:;"\'<,.>?/]+|[A-Za-z\']+',obj.sentence_en):
                 sep.append({
                     'verb':verb,
                     'isBad':False
                 })
+
+            print(sep)
 
             # sep = json.load(open("C:\\Users\\mayn\\Documents\\Django_Kaldi\\test.json",'r',encoding='utf-8'))['sentence']
 
@@ -582,9 +585,8 @@ def judgeAudio(request):
             # 但添加时就对数据进行处理
             if sentence_obj.sentence_upper == '@default':
                 # 对例句进行处理，去除标点并转为大写
-                verb_pattern = re.compile('[A-Za-z\']+')
                 print(sentence_obj.sentence_en)
-                verb_list = verb_pattern.findall(sentence_obj.sentence_en)
+                verb_list = re.findall('[A-Za-z\']+',sentence_obj.sentence_en)
                 sentence_upper = ' '.join(verb_list)
                 sentence_obj.sentence_upper = sentence_upper.upper()
                 sentence_obj.save()
