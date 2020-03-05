@@ -1,3 +1,5 @@
+# 取消对于no-member的检查
+# pylint: disable=no-member
 from django.shortcuts import render
 from django.http import HttpResponse
 from Kaldi_speech.models import EveryDayMotto, Course, Section, Sentence, Verb, VerbExplain, User, UserCourse, UserVerb, UserSentence , UserSection
@@ -7,27 +9,78 @@ from YouDaoAPI.text_translation import getTrans
 from YouDaoAPI.text2speech import getSpeech
 from django.core.exceptions import ObjectDoesNotExist
 from Score.score import get_score
-from Django_Kaldi.settings import MEDIA_ROOT
+from django_redis import get_redis_connection
+from Django_Kaldi.settings import MEDIA_ROOT,GOP_ROOT,NOT_FOUND,SESSION_INVALID,BAD_REQUEST_TYPE,WX_URL,APP_SECRECT,APP_ID
 
 import re
 import json
 import os
 import requests
 import datetime
+import hashlib
 
 # Create your views here.
-GOP_ROOT = '/home/ubuntu/kaldi/egs/gop-compute'
+
+'''
+小程序维护登录状态
+登录过程：
+1. wx.login()获取res.code并用wx.request()发送res.code到第三方服务器(小程序后端);
+2. 后端发送Get请求到微信服务器获取用户登录的open_id和session_key;
+3. 后端收到open_id后判断数据库中是否存在
+    不存在则创建用户对象;
+4. 后端根据open_id和session_key生成一个3rd_session返回给小程序;
+5. 后端将3rd_session存入Redis缓存中，设置时效2小时;
+6. 小程序接收到3rd_session，则说明登录成功，并将3rd_session保存在本地,下次请求时,在请求头中携带3rd_session
+7. 后台接收到请求，从请求头中拿到3rd_session，判断缓存中是否还有此3rd_session，
+    如果有，说明还在登录态，允许执行请求相关操作，
+    如果没有，说明需要重新登录，给小程序返回401.
+ps: 如果后续需要对用户的open_id进行操作时，可以再向redis存储中添加一项，以3rd_session为键，open_id为key，这样可以保证服务器安全性
+'''
 
 def Index(request):
-
-    motto_obj = None
-
     try:
-        open_id = request.GET['open_id']
+        # 尝试从redis中获取用户的open_id
+        # 请求中header保存在META数据段中，且获取的办法为HTTP_XXX,XXX为变量名称
+        open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION"))
+        if open_id is None:
+            changeSession = True
+            # 如果获取不到，则返回None
+            # 获取不到open_id,根据用户提供的code从微信故武器获取open_id
+            code = request.META.get("HTTP_CODE")
+            print(code)
+            data = {
+                'appid': APP_ID,
+                'secret': APP_SECRECT,
+                'js_code': code,
+                'grant_type': 'authorization_code'
+            }
+            res = json.loads(requests.get(WX_URL, params=data).content)
+            if 'errcode' in res:
+                # 获取出错时,直接返回
+                return HttpResponse(NOT_FOUND)
+            else:    
+                # 登录成功
+                open_id = res['openid']
+                session_key = res['session_key']
+                # 生成3rd_，返回给小程序
+                sha = hashlib.sha1()
+                sha.update(open_id.encode())
+                sha.update(session_key.encode())
+                session = sha.hexdigest()
+                con = get_redis_connection('default')
+                # 将 3rd_session 保存到缓存中, 十二个小时过期
+                con.set(session, open_id, ex=12*60*60)
+                # 测试缓存过期的情况，如果过期则需要用户重新登录
+                # 返回open_id,并在小程序中存储在本地
+        else:
+            # 连接到default分区,获取不到时返回None,默认返回为Byte类型的数据，需要进行解码
+            open_id = open_id.decode('utf-8')
+            changeSession = False
+            session = ""
 
-        # print('user open id : {}'.format(open_id))
-
-        user_obj = User.objects.get(open_id=open_id)
+        print(open_id)
+        # get_or_create返回的是一个元组
+        user_obj,_ = User.objects.get_or_create(open_id=open_id)
 
         # 计算用户学习天数
         td = datetime.datetime.now()
@@ -50,16 +103,17 @@ def Index(request):
             'poster': motto.poster.url,
             'learn_days': user_obj.learn_days,
             'curr_course':user_obj.curr_course,
+            'status':200,
+            'changeSession':changeSession,
+            'session':session
         }
+        return HttpResponse(json.dumps(motto_obj))
     except:
-        motto_obj = {
-            'error':400
-        }
-    return HttpResponse(json.dumps(motto_obj))
+        return HttpResponse(NOT_FOUND)
 
 
-def getCourseInfo(requests):
-    order = requests.GET['order']
+def getCourseInfo(request):
+    order = request.GET['order']
     print('课程要求排列顺序为 ： {}'.format(order))
     if order == 'default':
         course_objs = Course.objects.all()
@@ -69,6 +123,9 @@ def getCourseInfo(requests):
     elif order == 'new':
         # 按时间排序默认是按添加事件的先后，此处需要反序
         course_objs = Course.objects.order_by('add_time').reverse()
+    else:
+        # 出现其他请求时
+        return HttpResponse(NOT_FOUND)
 
     courseInfo = []
 
@@ -86,7 +143,11 @@ def getCourseInfo(requests):
 
 def getSectionInfo(request):
 
-    open_id = request.GET['open_id']
+    # print(request.session['open_id'])
+    try:
+        open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION")).decode('utf-8')
+    except AttributeError:
+        return HttpResponse(SESSION_INVALID)
 
     course_id = request.GET['course_id']
 
@@ -125,8 +186,6 @@ def getSectionInfo(request):
 
     sec_obj['section_finish'] = []
 
-    prev_finish = True
-
     for sec in section_objs:
         # 获取用户完成状况
         try:
@@ -149,16 +208,15 @@ def getSectionInfo(request):
 
 def getSentenceInfo(request):
 
+    # 获取用户open_id，修改相关信息
+    try:
+        open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION")).decode('utf-8')
+    except AttributeError:
+        return HttpResponse(SESSION_INVALID)
+
     section_id = int(request.GET['section_id'])
 
-    # 获取用户open_id，修改相关信息
-    open_id = request.GET['open_id']
-
-    # print('section_id = {}'.format(section_id))
-
     sen_obj = {}
-
-    # pattern = r'\w+\'\w+|\w+-\w+|[\.\,\;\?\!\-\:\(\)\'\"]+|\w+'
 
     user_obj = User.objects.get(open_id=open_id)
 
@@ -223,7 +281,7 @@ def getSentenceInfo(request):
             #     sep.append(i.group())
             sep = []
             # 此处需要使用正则表达式筛选单词
-            for verb in re.findall('[~`!@#$%^&*()_\-+={}\[\]\|\\:;"\'<,.>?/]+|[A-Za-z\']+',obj.sentence_en):
+            for verb in re.findall(r'[~`!@#$%^&*()_\-+={}\[\]\|\\:;"\'<,.>?/]+|[A-Za-z\']+',obj.sentence_en):
                 sep.append({
                     'verb':verb,
                     'isBad':False
@@ -259,48 +317,18 @@ def getSentenceInfo(request):
 
             index += 1
 
-        sen_obj['error'] = 0
+        sen_obj['status'] = 200
     else:
-        sen_obj['error'] = 99
-
-    # print(sen_obj)
+        sen_obj['status'] = 500
 
     return HttpResponse(json.dumps(sen_obj))
-
-
-def userLogin(request):
-    WX_URL = 'https://api.weixin.qq.com/sns/jscode2session'
-    APP_SECRECT = 'b1ee7e749ce757a9831dd942ac7e5730'
-    APP_ID = 'wx28edbe6419ec7914'
-    code = request.GET['code']
-    data = {
-        'appid': APP_ID,
-        'secret': APP_SECRECT,
-        'js_code': code,
-        'grant_type': 'authorization_code'
-    }
-
-    res = json.loads(requests.get(WX_URL, params=data).content)
-
-    print(res)
-
-    open_id = res['openid']
-
-    # get_or_create返回的是一个元组
-    user_obj = User.objects.get_or_create(open_id=open_id)
-
-    # 返回open_id,并在小程序中存储在本地
-
-    data = {
-        'open_id': open_id,
-    }
-
-    return HttpResponse(json.dumps(data))
-
-
+        
 def updataStudyStatus(request):
     # 获取用户当前学习状况
-    open_id = request.GET['open_id']
+    try:
+        open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION")).decode('utf-8')
+    except AttributeError:
+        return HttpResponse(SESSION_INVALID)
 
     up_type = request.GET['type']
 
@@ -352,12 +380,14 @@ def updataStudyStatus(request):
 
 
 def getVerbTrans(request):
+    try:
+        open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION")).decode('utf-8')
+    except AttributeError:
+        return HttpResponse(SESSION_INVALID)
 
     pattern = r'(\w{1,10}\.)\s(.*)'
 
     verb = request.GET['verb'].lower()
-
-    open_id = request.GET['open_id']
 
     user_obj = User.objects.get(open_id=open_id)
 
@@ -420,7 +450,7 @@ def getVerbTrans(request):
 
     # 查询用户是否收藏过单词
     try:
-        uv_obj = UserVerb.objects.get(user=user_obj, verb=verbObj)
+        UserVerb.objects.get(user=user_obj, verb=verbObj)
         isFav = True
         print('用户收藏过这个单词了嗷')
     except ObjectDoesNotExist:
@@ -450,7 +480,11 @@ def getVerbTrans(request):
 
 
 def addVerbFav(request):
-    open_id = request.GET['open_id']
+    try:
+        open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION")).decode('utf-8')
+    except AttributeError:
+        return HttpResponse(SESSION_INVALID)
+
     isFav = request.GET['isFav']
     verb = request.GET['verb']
 
@@ -471,7 +505,10 @@ def addVerbFav(request):
 
 
 def getVerbList(request):
-    open_id = request.GET['open_id']
+    try:
+        open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION")).decode('utf-8')
+    except AttributeError:
+        return HttpResponse(SESSION_INVALID)
 
     user_obj = User.objects.get(open_id=open_id)
 
@@ -528,7 +565,11 @@ def judgeAudio(request):
         # 必须是post请求
         # print(request.POST)
         # 使用DJango作为微信小程序后端，需要禁用Django的CSRF cookie监测
-        open_id = request.POST['open_id']
+        try:
+            open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION")).decode('utf-8')
+        except AttributeError:
+            return HttpResponse(SESSION_INVALID)
+
         judge_type = request.POST['type']
         print('Type: {}'.format(judge_type))
         # 采用read直接读取二进制文件，对于较大文件不便使用，但此处用户录音一般不超过一分钟，可以使用
@@ -570,16 +611,13 @@ def judgeAudio(request):
                 temp_path = ua_obj.audio.path
                 ua_obj.audio.delete()
                 # 最好是将原来的发音清除
-                # os.system('rm {}'.format(temp_path))
-                ua_obj.audio.save('{}_{}.mp3'.format(
-                    user_obj.id, sentence_id), ContentFile(user_audio))
+                os.system('rm {}'.format(temp_path))
+                ua_obj.audio.save('{}_{}.mp3'.format(user_obj.id, sentence_id), ContentFile(user_audio))
                 print('用户以前发音过')
             except ObjectDoesNotExist:
                 print('用户第一次发音')
-                ua_obj = UserSentence.objects.create(
-                    user=user_obj, sentence=sentence_obj, score=score)
-                ua_obj.audio.save('{}_{}.mp3'.format(
-                    user_obj.id, sentence_id), ContentFile(user_audio))
+                ua_obj = UserSentence.objects.create(user=user_obj, sentence=sentence_obj, score=score)
+                ua_obj.audio.save('{}_{}.mp3'.format(user_obj.id, sentence_id), ContentFile(user_audio))
 
             user_audio_src = ua_obj.audio.url
             FileName = '{}_{}'.format(user_obj.id,sentence_id)
@@ -590,7 +628,7 @@ def judgeAudio(request):
             if sentence_obj.sentence_upper == '@default':
                 # 对例句进行处理，去除标点并转为大写
                 print(sentence_obj.sentence_en)
-                verb_list = re.findall('[A-Za-z\']+',sentence_obj.sentence_en)
+                verb_list = re.findall(r'[A-Za-z\']+',sentence_obj.sentence_en)
                 sentence_upper = ' '.join(verb_list)
                 sentence_obj.sentence_upper = sentence_upper.upper()
                 sentence_obj.save()
@@ -606,11 +644,14 @@ def judgeAudio(request):
 
         return HttpResponse(json.dumps(res))
     else:
-        return HttpResponse(json.dumps({'error_code':99}))
+        return HttpResponse(BAD_REQUEST_TYPE)
 
 
 def getAudioList(request):
-    open_id = request.GET['open_id']
+    try:
+        open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION")).decode('utf-8')
+    except AttributeError:
+        return HttpResponse(SESSION_INVALID)
 
     user_obj = User.objects.get(open_id=open_id)
 
@@ -658,7 +699,11 @@ def removeAudioList(request):
 # 是否需要在数据库中记录是否学习完成，章节是否学习完成，如此较好判别是否学习完成
 
 def getUserCourse(request):
-    open_id = request.GET['open_id']
+    try:
+        open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION")).decode('utf-8')
+    except AttributeError:
+        return HttpResponse(SESSION_INVALID)
+
     order = request.GET['order']
 
     user_obj = User.objects.get(open_id=open_id)
@@ -696,4 +741,3 @@ def getUserCourse(request):
 
     return HttpResponse(json.dumps(courseInfo))
     
-

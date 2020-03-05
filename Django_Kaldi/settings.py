@@ -21,6 +21,9 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # this means .../../../
 FILE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# URL
+GOP_ROOT = '/home/ubuntu/kaldi/egs/gop-compute'
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/2.2/howto/deployment/checklist/
 
@@ -108,6 +111,17 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Cache, Using redis
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "CONNECTION_POOL_KWARGS": {"max_connections": 1000}
+        }
+    }
+}
 
 # Internationalization
 # https://docs.djangoproject.com/en/2.2/topics/i18n/
@@ -139,3 +153,17 @@ MEDIA_ROOT = os.path.join(FILE_DIR,'media')
 # 配置 MEDIA_URL 作为公用URL，指向上传文件的基本路径
 
 MEDIA_URL = '/media/'
+
+WX_URL = 'https://api.weixin.qq.com/sns/jscode2session'
+
+APP_SECRECT = 'b1ee7e749ce757a9831dd942ac7e5730'
+
+APP_ID = 'wx28edbe6419ec7914'
+
+# Default response
+
+NOT_FOUND = '{"status":404,"msg":"object not found"}'
+
+SESSION_INVALID = '{"status":401,"msg":"session outdate"}'
+
+BAD_REQUEST_TYPE = '{"status":402,"msg":"bad request type"}'
