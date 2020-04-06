@@ -10,7 +10,7 @@ from YouDaoAPI.text2speech import getSpeech
 from django.core.exceptions import ObjectDoesNotExist
 from Score.score import get_score
 from django_redis import get_redis_connection
-from Django_Kaldi.settings import MEDIA_ROOT,GOP_ROOT,NOT_FOUND,SESSION_INVALID,BAD_REQUEST_TYPE,WX_URL,APP_SECRECT,APP_ID
+from Django_Kaldi.settings import *
 
 import re
 import json
@@ -740,4 +740,78 @@ def getUserCourse(request):
         })
 
     return HttpResponse(json.dumps(courseInfo))
-    
+
+def getAccessToken():
+    # 所有需要获取微信小程序接口访问权限都需要调用此函数来获取
+    connection = get_redis_connection('default')
+    access_token = connection.get('access_token')
+    if access_token is None:
+        data = {
+            'appid': APP_ID,
+            'secret': APP_SECRECT,
+            'grant_type':'client_credential'
+        }
+        res = json.loads(requests.get(ACCESS_TOKEN_URL,data).content)
+        print(res)
+        if 'errcode' in res:
+            raise Exception("get access token failed")
+        access_token = res['access_token']
+        # 凭证有效期7200s，两小时
+        connection.set('access_token',access_token,7000)
+    return access_token
+
+def TestFunction(request):
+    access_token = getAccessToken()
+    # 获取到access_token之后推送消息
+    user_objs = User.objects.all()[0]
+    data = {
+        'access_token':access_token,
+        'touser':user_objs.open_id,
+        'template_id':MESSAGE_TEMPLATE_ID,
+        'page':'pages/index/index',
+        'data':{
+            'thing1':{
+                'value':'每日打卡提醒'
+            },
+            'thing5':{
+                'value':'开启元气满满的一天'
+            },
+            'character_string3':{
+                'value':'0/21'
+            },
+            'date14':{
+                'value':'9:00'
+            },
+        }
+    }
+    return HttpResponse(requests.post(SEND_URL,data).content)
+
+# django-crontab,执行定时任务，每天早晨9：00提醒用户打卡学习
+def sendSubscribeMessage():
+    # 由于这个函数是由外部函数执行，其库需要单独引入，否则会报错
+    # 获取access_token并保存在redis缓存中，有效期是2小时
+    print("打卡了弟弟")
+    access_token = getAccessToken()
+    for user in User.objects.all():
+        print("send message to {}".format(user.open_id))
+        data = {
+            'access_token':access_token,
+            'touser':user.open_id,
+            'template_id':MESSAGE_TEMPLATE_ID,
+            'page':'pages/index/index',
+            'data':{
+                'thing1':{
+                    'value':'每日打卡提醒'
+                },
+                'thing5':{
+                    'value':'开启元气满满的一天'
+                },
+                'character_string3':{
+                    'value':'0/21'
+                },
+                'date14':{
+                    'value':'9:00'
+                },
+            }
+        }
+        print(requests.post(SEND_URL,data).content)

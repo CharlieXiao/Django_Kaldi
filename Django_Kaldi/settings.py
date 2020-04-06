@@ -40,6 +40,7 @@ ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
     # 'simpleui', 
+    'django_crontab',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -47,6 +48,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'Kaldi_speech',
+    # 启用定时任务模块
 ]
 
 MIDDLEWARE = [
@@ -156,6 +158,12 @@ MEDIA_URL = '/media/'
 
 WX_URL = 'https://api.weixin.qq.com/sns/jscode2session'
 
+ACCESS_TOKEN_URL = 'https://api.weixin.qq.com/cgi-bin/token'
+
+SEND_URL = 'https://api.weixin.qq.com/cgi-bin/message/send'
+
+MESSAGE_TEMPLATE_ID = 'PgnEXYQ78_7wPLYwpyLpct5slrba1hkwVQw7mF_KenM'
+
 APP_SECRECT = 'b1ee7e749ce757a9831dd942ac7e5730'
 
 APP_ID = 'wx28edbe6419ec7914'
@@ -167,3 +175,11 @@ NOT_FOUND = '{"status":404,"msg":"object not found"}'
 SESSION_INVALID = '{"status":401,"msg":"session outdate"}'
 
 BAD_REQUEST_TYPE = '{"status":402,"msg":"bad request type"}'
+
+# Crontab Settings
+
+CRONJOBS = [
+    # 每天9：30分执行人物
+    # 参数格式：('f1 f2 f3 f4 f5','app名.xxx.函数名,'>>输出文件路径')
+    ('* * * * *','Kaldi_speech.views.sendSubscribeMessage','>>/home/ubuntu/Desktop/RestKaldi/log/crontab.log')
+]
