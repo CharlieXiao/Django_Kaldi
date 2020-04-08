@@ -163,6 +163,12 @@ def get_score(GopPath, FileName, FileSrc, Text, langModel='lang3', acousticModel
             if not has_match:
                 return -1
 
+        #导入phones_threshold json文件
+        with open("phones_threshold.json",'r', encoding='UTF-8') as f:
+            phones_threshold_dict = json.load(f)
+        
+        #print(phones_threshold_dict)
+
         CntLevel1 = 0
         CntLevel2 = 0
         CntLevel3 = 0
@@ -171,6 +177,9 @@ def get_score(GopPath, FileName, FileSrc, Text, langModel='lang3', acousticModel
         phone_index = 0
 
         for j in range(len(score_list)):
+            THRESHOLD_LEVEL_1 = phones_threshold_dict[phone_list[j]][1]
+            THRESHOLD_LEVEL_2 = phones_threshold_dict[phone_list[j]][0]
+            
             if phone_list[j] in ignore_phones:
                 continue
             # print("curr phone: {}\t\tcurr verb: {}\t\tcurr phone: {}".format(phone_list[j], sentence[verb_index]['verb'],sentence[verb_index]['phones'][phone_index]))
@@ -218,9 +227,18 @@ def get_score(GopPath, FileName, FileSrc, Text, langModel='lang3', acousticModel
 
 if __name__ == "__main__":
     start_time = time.time()
-    print(get_score('/home/ubuntu/kaldi/egs/gop-compute', '11',
-                    '/home/ubuntu/Django_Kaldi/media/course/course_6/section_4/11.mp3', 'WHAT MAKES THE DESSERT BEAUTIFUL'))
+    print(get_score('/home/ljh/kaldi-test/kaldi-trunk/egs/gop-compute_server', 'good',
+                    '/home/ljh/audio/good.mp3', 'WHAT MAKES THE DESSERT BEAUTIFUL'))
     end_time = time.time()
     print("Start_time: {}".format(start_time))
     print("End_time: {}".format(end_time))
     print("Total Use: {}".format(end_time-start_time))
+
+# if __name__ == "__main__":
+#     start_time = time.time()
+#     print(get_score('/home/ubuntu/kaldi/egs/gop-compute', '11',
+#                     '/home/ubuntu/Django_Kaldi/media/course/course_6/section_4/11.mp3', 'WHAT MAKES THE DESSERT BEAUTIFUL'))
+#     end_time = time.time()
+#     print("Start_time: {}".format(start_time))
+#     print("End_time: {}".format(end_time))
+#     print("Total Use: {}".format(end_time-start_time))
