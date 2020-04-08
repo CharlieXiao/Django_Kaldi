@@ -1,11 +1,5 @@
-'''
-@Descripttion: 
-@version: 
-@Author: Paul
-@Date: 2019-08-29 22:59:21
-@LastEditors: Paul
-@LastEditTime: 2020-04-08 00:46:00
-'''
+
+
 """Django_Kaldi URL Configuration
 
 The `urlpatterns` list routes URLs to views. For more information please see:
