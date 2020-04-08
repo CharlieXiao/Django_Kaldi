@@ -44,91 +44,88 @@ ps: 如果后续需要对用户的open_id进行操作时，可以再向redis存�
 
 
 def Index(request):
-    try:
-        # 尝试从redis中获取用户的open_id
-        # 请求中header保存在META数据段中，且获取的办法为HTTP_XXX,XXX为变量名称
-        open_id = get_redis_connection('default').get(
-            request.META.get("HTTP_SESSION"))
-        if open_id is None:
-            changeSession = True
-            # 如果获取不到，则返回None
-            # 获取不到open_id,根据用户提供的code从微信故武器获取open_id
-            code = request.META.get("HTTP_CODE")
-            logger.debug('user code:{}'.format(code))
-            data = {
-                'appid': APP_ID,
-                'secret': APP_SECRECT,
-                'js_code': code,
-                'grant_type': 'authorization_code'
-            }
-            res = json.loads(requests.get(WX_URL, params=data).content)
-            logger.debug(res)
-            if 'errcode' in res:
-                # 获取出错时,直接返回
-                logger.debug('获取用户信息失败，返回404')
-                return HttpResponse(NOT_FOUND)
-            else:
-                # 登录成功
-                open_id = res['openid']
-                session_key = res['session_key']
-                # 生成3rd_，返回给小程序
-                sha = hashlib.sha1()
-                sha.update(open_id.encode())
-                sha.update(session_key.encode())
-                session = sha.hexdigest()
-                con = get_redis_connection('default')
-                # 将 3rd_session 保存到缓存中, 十二个小时过期
-                con.set(session, open_id, ex=12*60*60)
-                # 测试缓存过期的情况，如果过期则需要用户重新登录
-                # 返回open_id,并在小程序中存储在本地
-        else:
-            # 连接到default分区,获取不到时返回None,默认返回为Byte类型的数据，需要进行解码
-            open_id = open_id.decode('utf-8')
-            changeSession = False
-            session = ""
-
-        logger.debug("用户open_id "+open_id)
-        # 计算用户学习天数
-        td = datetime.datetime.now()
-        curr_date = datetime.date(td.year, td.month, td.day)
-
-        # get_or_create返回的是一个元组
-        user_obj, isCreate = User.objects.get_or_create(open_id=open_id)
-        logger.debug("新用户：",isCreate)
-        if isCreate:
-            # 当用户首次使用时也会更新学习记录
-            logger.debug("新增学习记录")
-            UserAttendance.objects.create(user=user_obj, attend_date=curr_date)
-        # 只要用户点进小程序，即算学习一天
-        # 获取当前时间，比对，不相同则learn-days加一天
-        # 比较最后学习时间，如果不在同一天，则不修改
-        # 如果用户首次进入
-
-        if curr_date != user_obj.last_learn_time:
-            logger.debug('更新用户学习天数')
-            user_obj.learn_days += 1
-            # 创建一个学习记录
-            # 新增学习记录
-            UserAttendance.objects.create(user=user_obj, attend_date=curr_date)
-        user_obj.save()
-
-        # 实际在首页还会显示用户学习天数等信息，点击开始学习直接进入上次未完成的课程，没有则直接进入课程列表
-        # 获得每日格言
-        motto = EveryDayMotto.objects.all()[0]
-
-        motto_obj = {
-            'motto': motto.motto,
-            'author': motto.author,
-            'poster': motto.poster.url,
-            'learn_days': user_obj.learn_days,
-            'curr_course': user_obj.curr_course,
-            'status': 200,
-            'changeSession': changeSession,
-            'session': session
+    # 尝试从redis中获取用户的open_id
+    # 请求中header保存在META数据段中，且获取的办法为HTTP_XXX,XXX为变量名称
+    open_id = get_redis_connection('default').get(
+        request.META.get("HTTP_SESSION"))
+    if open_id is None:
+        changeSession = True
+        # 如果获取不到，则返回None
+        # 获取不到open_id,根据用户提供的code从微信故武器获取open_id
+        code = request.META.get("HTTP_CODE")
+        logger.debug('user code:{}'.format(code))
+        data = {
+            'appid': APP_ID,
+            'secret': APP_SECRECT,
+            'js_code': code,
+            'grant_type': 'authorization_code'
         }
-        return HttpResponse(json.dumps(motto_obj))
-    except:
-        return HttpResponse(NOT_FOUND)
+        res = json.loads(requests.get(WX_URL, params=data).content)
+        logger.debug(res)
+        if 'errcode' in res:
+            # 获取出错时,直接返回
+            logger.debug('获取用户信息失败，返回404')
+            return HttpResponse(NOT_FOUND)
+        else:
+            # 登录成功
+            open_id = res['openid']
+            session_key = res['session_key']
+            # 生成3rd_，返回给小程序
+            sha = hashlib.sha1()
+            sha.update(open_id.encode())
+            sha.update(session_key.encode())
+            session = sha.hexdigest()
+            con = get_redis_connection('default')
+            # 将 3rd_session 保存到缓存中, 十二个小时过期
+            con.set(session, open_id, ex=12*60*60)
+            # 测试缓存过期的情况，如果过期则需要用户重新登录
+            # 返回open_id,并在小程序中存储在本地
+    else:
+        # 连接到default分区,获取不到时返回None,默认返回为Byte类型的数据，需要进行解码
+        open_id = open_id.decode('utf-8')
+        changeSession = False
+        session = ""
+
+    logger.debug("用户open_id "+open_id)
+    # 计算用户学习天数
+    td = datetime.datetime.now()
+    curr_date = datetime.date(td.year, td.month, td.day)
+
+    # get_or_create返回的是一个元组
+    user_obj, isCreate = User.objects.get_or_create(open_id=open_id)
+    logger.debug("新用户：",isCreate)
+    if isCreate:
+        # 当用户首次使用时也会更新学习记录
+        logger.debug("新增学习记录")
+        UserAttendance.objects.create(user=user_obj, attend_date=curr_date)
+    # 只要用户点进小程序，即算学习一天
+    # 获取当前时间，比对，不相同则learn-days加一天
+    # 比较最后学习时间，如果不在同一天，则不修改
+    # 如果用户首次进入
+
+    if curr_date != user_obj.last_learn_time:
+        logger.debug('更新用户学习天数')
+        user_obj.learn_days += 1
+        # 创建一个学习记录
+        # 新增学习记录
+        UserAttendance.objects.create(user=user_obj, attend_date=curr_date)
+    user_obj.save()
+
+    # 实际在首页还会显示用户学习天数等信息，点击开始学习直接进入上次未完成的课程，没有则直接进入课程列表
+    # 获得每日格言
+    motto = EveryDayMotto.objects.all()[0]
+
+    motto_obj = {
+        'motto': motto.motto,
+        'author': motto.author,
+        'poster': motto.poster.url,
+        'learn_days': user_obj.learn_days,
+        'curr_course': user_obj.curr_course,
+        'status': 200,
+        'changeSession': changeSession,
+        'session': session
+    }
+    return HttpResponse(json.dumps(motto_obj))
 
 
 def getCourseInfo(request):
