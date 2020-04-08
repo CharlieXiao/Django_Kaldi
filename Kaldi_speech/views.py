@@ -2,7 +2,7 @@
 # pylint: disable=no-member
 from django.shortcuts import render
 from django.http import HttpResponse
-from Kaldi_speech.models import EveryDayMotto, Course, Section, Sentence, Verb, VerbExplain, User, UserCourse, UserVerb, UserSentence , UserSection
+from Kaldi_speech.models import Course, EveryDayMotto, Section, Sentence, User, UserAttendance, UserCourse, UserSection, UserSentence, UserVerb, Verb, VerbExplain
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from YouDaoAPI.text_translation import getTrans
@@ -12,6 +12,7 @@ from Score.score import get_score
 from django_redis import get_redis_connection
 from Django_Kaldi.settings import *
 
+import datetime
 import re
 import json
 import os
@@ -37,11 +38,13 @@ import hashlib
 ps: 如果后续需要对用户的open_id进行操作时，可以再向redis存储中添加一项，以3rd_session为键，open_id为key，这样可以保证服务器安全性
 '''
 
+
 def Index(request):
     try:
         # 尝试从redis中获取用户的open_id
         # 请求中header保存在META数据段中，且获取的办法为HTTP_XXX,XXX为变量名称
-        open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION"))
+        open_id = get_redis_connection('default').get(
+            request.META.get("HTTP_SESSION"))
         if open_id is None:
             changeSession = True
             # 如果获取不到，则返回None
@@ -58,7 +61,7 @@ def Index(request):
             if 'errcode' in res:
                 # 获取出错时,直接返回
                 return HttpResponse(NOT_FOUND)
-            else:    
+            else:
                 # 登录成功
                 open_id = res['openid']
                 session_key = res['session_key']
@@ -80,11 +83,14 @@ def Index(request):
 
         print(open_id)
         # get_or_create返回的是一个元组
-        user_obj,_ = User.objects.get_or_create(open_id=open_id)
+        user_obj, _ = User.objects.get_or_create(open_id=open_id)
 
         # 计算用户学习天数
         td = datetime.datetime.now()
         curr_date = datetime.date(td.year, td.month, td.day)
+        # 创建一个学习记录
+        user = UserAttendance.objects.create(
+            user=user_obj, attend_date=curr_date)
         # 只要用户点进小程序，即算学习一天
         # 获取当前时间，比对，不相同则learn-days加一天
         # 比较最后学习时间，如果不在同一天，则不修改
@@ -102,10 +108,10 @@ def Index(request):
             'author': motto.author,
             'poster': motto.poster.url,
             'learn_days': user_obj.learn_days,
-            'curr_course':user_obj.curr_course,
-            'status':200,
-            'changeSession':changeSession,
-            'session':session
+            'curr_course': user_obj.curr_course,
+            'status': 200,
+            'changeSession': changeSession,
+            'session': session
         }
         return HttpResponse(json.dumps(motto_obj))
     except:
@@ -145,7 +151,8 @@ def getSectionInfo(request):
 
     # print(request.session['open_id'])
     try:
-        open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION")).decode('utf-8')
+        open_id = get_redis_connection('default').get(
+            request.META.get("HTTP_SESSION")).decode('utf-8')
     except AttributeError:
         return HttpResponse(SESSION_INVALID)
 
@@ -162,7 +169,6 @@ def getSectionInfo(request):
     # 更新当前课程
     user_obj.curr_course = course_obj.id
     user_obj.save()
-    
 
     # 获取当前用户学习情况
     try:
@@ -171,7 +177,8 @@ def getSectionInfo(request):
     except ObjectDoesNotExist:
         curr_section = section_objs[0].id
         # 添加学习记录
-        uc_obj = UserCourse.objects.create(user=user_obj,course=course_obj,curr_section=curr_section)
+        uc_obj = UserCourse.objects.create(
+            user=user_obj, course=course_obj, curr_section=curr_section)
 
     sec_obj['courseInfo'] = {
         'id': course_obj.id,
@@ -189,11 +196,10 @@ def getSectionInfo(request):
     for sec in section_objs:
         # 获取用户完成状况
         try:
-            us_obj = UserSection.objects.get(user=user_obj,section=sec)
+            us_obj = UserSection.objects.get(user=user_obj, section=sec)
             is_finish = us_obj.is_finish
         except ObjectDoesNotExist:
             is_finish = False
-        
 
         sec_obj['courseSec'].append({
             'id': sec.id,
@@ -202,15 +208,16 @@ def getSectionInfo(request):
         })
 
         sec_obj['section_finish'].append(is_finish)
-        
 
     return HttpResponse(json.dumps(sec_obj))
+
 
 def getSentenceInfo(request):
 
     # 获取用户open_id，修改相关信息
     try:
-        open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION")).decode('utf-8')
+        open_id = get_redis_connection('default').get(
+            request.META.get("HTTP_SESSION")).decode('utf-8')
     except AttributeError:
         return HttpResponse(SESSION_INVALID)
 
@@ -227,7 +234,7 @@ def getSentenceInfo(request):
     objs = section_obj.sentence_set.all()
 
     # 更新当前章节
-    uc_obj = UserCourse.objects.get(user=user_obj,course=course_obj)
+    uc_obj = UserCourse.objects.get(user=user_obj, course=course_obj)
     uc_obj.curr_section = section_obj.id
     uc_obj.save()
 
@@ -236,11 +243,12 @@ def getSentenceInfo(request):
         curr_sentence = objs[0].id
         # 更新用户数据和用户课程数据库
         try:
-            us_obj = UserSection.objects.get(user=user_obj,section=section_obj)
+            us_obj = UserSection.objects.get(
+                user=user_obj, section=section_obj)
             curr_sentence = us_obj.curr_sentence
         except ObjectDoesNotExist:
             us_obj = UserSection.objects.create(
-                user=user_obj, section=section_obj,curr_sentence=curr_sentence)
+                user=user_obj, section=section_obj, curr_sentence=curr_sentence)
 
         sen_obj['sentenceInfo'] = {}
         sen_obj['sectionInfo'] = {
@@ -281,10 +289,10 @@ def getSentenceInfo(request):
             #     sep.append(i.group())
             sep = []
             # 此处需要使用正则表达式筛选单词
-            for verb in re.findall(r'[~`!@#$%^&*()_\-+={}\[\]\|\\:;"\'<,.>?/]+|[A-Za-z\']+',obj.sentence_en):
+            for verb in re.findall(r'[~`!@#$%^&*()_\-+={}\[\]\|\\:;"\'<,.>?/]+|[A-Za-z\']+', obj.sentence_en):
                 sep.append({
-                    'verb':verb,
-                    'isBad':False
+                    'verb': verb,
+                    'isBad': False
                 })
 
             print(sep)
@@ -322,11 +330,13 @@ def getSentenceInfo(request):
         sen_obj['status'] = 500
 
     return HttpResponse(json.dumps(sen_obj))
-        
+
+
 def updataStudyStatus(request):
     # 获取用户当前学习状况
     try:
-        open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION")).decode('utf-8')
+        open_id = get_redis_connection('default').get(
+            request.META.get("HTTP_SESSION")).decode('utf-8')
     except AttributeError:
         return HttpResponse(SESSION_INVALID)
 
@@ -344,7 +354,7 @@ def updataStudyStatus(request):
         sec_finish = True
         for sen in sec_obj.sentence_set.all():
             try:
-                UserSentence.objects.get(user=user_obj,sentence=sen)
+                UserSentence.objects.get(user=user_obj, sentence=sen)
             except ObjectDoesNotExist:
                 sec_finish = False
                 break
@@ -355,14 +365,14 @@ def updataStudyStatus(request):
         # 还需要遍历该课程下所有章节，判断这一课程是否完成
         course_obj = sec_obj.course
         course_finish = True
-        uc_obj = UserCourse.objects.get(user=user_obj,course=course_obj)
+        uc_obj = UserCourse.objects.get(user=user_obj, course=course_obj)
         sec_objs = course_obj.section_set.all()
 
         section_finish = []
 
         for sec in sec_objs:
             try:
-                temp_obj = UserSection.objects.get(user=user_obj,section=sec)
+                temp_obj = UserSection.objects.get(user=user_obj, section=sec)
                 section_finish.append(temp_obj.is_finish)
                 if not temp_obj.is_finish:
                     course_finish = False
@@ -381,7 +391,8 @@ def updataStudyStatus(request):
 
 def getVerbTrans(request):
     try:
-        open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION")).decode('utf-8')
+        open_id = get_redis_connection('default').get(
+            request.META.get("HTTP_SESSION")).decode('utf-8')
     except AttributeError:
         return HttpResponse(SESSION_INVALID)
 
@@ -481,7 +492,8 @@ def getVerbTrans(request):
 
 def addVerbFav(request):
     try:
-        open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION")).decode('utf-8')
+        open_id = get_redis_connection('default').get(
+            request.META.get("HTTP_SESSION")).decode('utf-8')
     except AttributeError:
         return HttpResponse(SESSION_INVALID)
 
@@ -506,7 +518,8 @@ def addVerbFav(request):
 
 def getVerbList(request):
     try:
-        open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION")).decode('utf-8')
+        open_id = get_redis_connection('default').get(
+            request.META.get("HTTP_SESSION")).decode('utf-8')
     except AttributeError:
         return HttpResponse(SESSION_INVALID)
 
@@ -566,7 +579,8 @@ def judgeAudio(request):
         # print(request.POST)
         # 使用DJango作为微信小程序后端，需要禁用Django的CSRF cookie监测
         try:
-            open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION")).decode('utf-8')
+            open_id = get_redis_connection('default').get(
+                request.META.get("HTTP_SESSION")).decode('utf-8')
         except AttributeError:
             return HttpResponse(SESSION_INVALID)
 
@@ -587,18 +601,19 @@ def judgeAudio(request):
             # try save audio file
             verb_id = int(request.POST['verb_id'])
             verb_obj = Verb.objects.get(id=verb_id)
-            
-            audio_file_path = os.path.join(MEDIA_ROOT,'temp','temp_verb.mp3')
+
+            audio_file_path = os.path.join(MEDIA_ROOT, 'temp', 'temp_verb.mp3')
             # 这里收到的文件大小为0，有问题
             print('audio file size: {}'.format(len(user_audio)))
-            with open(audio_file_path,'wb') as audio_file:
+            with open(audio_file_path, 'wb') as audio_file:
                 audio_file.write(user_audio)
             audio_file.close()
-            
-            res = get_score(GOP_ROOT,'temp_verb',audio_file_path,verb_obj.verb.upper())
+
+            res = get_score(GOP_ROOT, 'temp_verb',
+                            audio_file_path, verb_obj.verb.upper())
 
             if res == -1:
-                return HttpResponse(json.dumps({'error_code':50}))
+                return HttpResponse(json.dumps({'error_code': 50}))
             res['error_code'] = 0
 
         else:
@@ -612,15 +627,18 @@ def judgeAudio(request):
                 ua_obj.audio.delete()
                 # 最好是将原来的发音清除
                 os.system('rm {}'.format(temp_path))
-                ua_obj.audio.save('{}_{}.mp3'.format(user_obj.id, sentence_id), ContentFile(user_audio))
+                ua_obj.audio.save('{}_{}.mp3'.format(
+                    user_obj.id, sentence_id), ContentFile(user_audio))
                 print('用户以前发音过')
             except ObjectDoesNotExist:
                 print('用户第一次发音')
-                ua_obj = UserSentence.objects.create(user=user_obj, sentence=sentence_obj, score=score)
-                ua_obj.audio.save('{}_{}.mp3'.format(user_obj.id, sentence_id), ContentFile(user_audio))
+                ua_obj = UserSentence.objects.create(
+                    user=user_obj, sentence=sentence_obj, score=score)
+                ua_obj.audio.save('{}_{}.mp3'.format(
+                    user_obj.id, sentence_id), ContentFile(user_audio))
 
             user_audio_src = ua_obj.audio.url
-            FileName = '{}_{}'.format(user_obj.id,sentence_id)
+            FileName = '{}_{}'.format(user_obj.id, sentence_id)
             # 需要提前对例句进行处理，去除所有标点符号
             # 建议在添加例句时就对例句进行处理
             # 添加一个数据像：sentence_en_upper
@@ -628,18 +646,20 @@ def judgeAudio(request):
             if sentence_obj.sentence_upper == '@default':
                 # 对例句进行处理，去除标点并转为大写
                 print(sentence_obj.sentence_en)
-                verb_list = re.findall(r'[A-Za-z\']+',sentence_obj.sentence_en)
+                verb_list = re.findall(
+                    r'[A-Za-z\']+', sentence_obj.sentence_en)
                 sentence_upper = ' '.join(verb_list)
                 sentence_obj.sentence_upper = sentence_upper.upper()
                 sentence_obj.save()
             print(sentence_obj.sentence_upper)
-            res = get_score(GOP_ROOT,FileName,ua_obj.audio.path,sentence_obj.sentence_upper)
+            res = get_score(GOP_ROOT, FileName, ua_obj.audio.path,
+                            sentence_obj.sentence_upper)
             # res = -1
             if res == -1:
-                return HttpResponse(json.dumps({'error_code':50}))
+                return HttpResponse(json.dumps({'error_code': 50}))
             ua_obj.score = res['score']
             ua_obj.save()
-            res['user-audio']= user_audio_src
+            res['user-audio'] = user_audio_src
             res['error_code'] = 0
 
         return HttpResponse(json.dumps(res))
@@ -649,7 +669,8 @@ def judgeAudio(request):
 
 def getAudioList(request):
     try:
-        open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION")).decode('utf-8')
+        open_id = get_redis_connection('default').get(
+            request.META.get("HTTP_SESSION")).decode('utf-8')
     except AttributeError:
         return HttpResponse(SESSION_INVALID)
 
@@ -698,9 +719,11 @@ def removeAudioList(request):
 
 # 是否需要在数据库中记录是否学习完成，章节是否学习完成，如此较好判别是否学习完成
 
+
 def getUserCourse(request):
     try:
-        open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION")).decode('utf-8')
+        open_id = get_redis_connection('default').get(
+            request.META.get("HTTP_SESSION")).decode('utf-8')
     except AttributeError:
         return HttpResponse(SESSION_INVALID)
 
@@ -712,10 +735,10 @@ def getUserCourse(request):
         course_objs = UserCourse.objects.filter(user=user_obj)
     elif order == '2':
         # 已经完成的课程
-        course_objs = UserCourse.objects.filter(user=user_obj,is_finish = False)
+        course_objs = UserCourse.objects.filter(user=user_obj, is_finish=False)
     elif order == '3':
         # 未完成的课程
-        course_objs = UserCourse.objects.filter(user=user_obj,is_finish = True)
+        course_objs = UserCourse.objects.filter(user=user_obj, is_finish=True)
 
     courseInfo = []
 
@@ -730,16 +753,17 @@ def getUserCourse(request):
                     num_finish += 1
                 else:
                     break
-        
+
         courseInfo.append({
-            'id':uc_obj.course.id,
-            'name':uc_obj.course.name,
-            'img':uc_obj.course.course_img.url,
-            'curr':num_finish,
-            'total':len(section_set),
+            'id': uc_obj.course.id,
+            'name': uc_obj.course.name,
+            'img': uc_obj.course.course_img.url,
+            'curr': num_finish,
+            'total': len(section_set),
         })
 
     return HttpResponse(json.dumps(courseInfo))
+
 
 def getAccessToken():
     # 所有需要获取微信小程序接口访问权限都需要调用此函数来获取
@@ -749,44 +773,47 @@ def getAccessToken():
         data = {
             'appid': APP_ID,
             'secret': APP_SECRECT,
-            'grant_type':'client_credential'
+            'grant_type': 'client_credential'
         }
-        res = json.loads(requests.get(ACCESS_TOKEN_URL,data).content)
+        res = json.loads(requests.get(ACCESS_TOKEN_URL, data).content)
         print(res)
         if 'errcode' in res:
             raise Exception("get access token failed")
         access_token = res['access_token']
         # 凭证有效期7200s，两小时
-        connection.set('access_token',access_token,7000)
+        connection.set('access_token', access_token, 7000)
     return access_token
+
 
 def TestFunction(request):
     access_token = getAccessToken()
     # 获取到access_token之后推送消息
     user_objs = User.objects.all()[0]
     data = {
-        'access_token':access_token,
-        'touser':user_objs.open_id,
-        'template_id':MESSAGE_TEMPLATE_ID,
-        'page':'pages/index/index',
-        'data':{
-            'thing1':{
-                'value':'每日打卡提醒'
+        'access_token': access_token,
+        'touser': user_objs.open_id,
+        'template_id': MESSAGE_TEMPLATE_ID,
+        'page': 'pages/index/index',
+        'data': {
+            'thing1': {
+                'value': '每日打卡提醒'
             },
-            'thing5':{
-                'value':'开启元气满满的一天'
+            'thing5': {
+                'value': '开启元气满满的一天'
             },
-            'character_string3':{
-                'value':'0/21'
+            'character_string3': {
+                'value': '0/21'
             },
-            'date14':{
-                'value':'9:00'
+            'date14': {
+                'value': '9:00'
             },
         }
     }
-    return HttpResponse(requests.post(SEND_URL,data).content)
+    return HttpResponse(requests.post(SEND_URL, data).content)
 
 # django-crontab,执行定时任务，每天早晨9：00提醒用户打卡学习
+
+
 def sendSubscribeMessage():
     # 由于这个函数是由外部函数执行，其库需要单独引入，否则会报错
     # 获取access_token并保存在redis缓存中，有效期是2小时
@@ -795,23 +822,66 @@ def sendSubscribeMessage():
     for user in User.objects.all():
         print("send message to {}".format(user.open_id))
         data = {
-            'access_token':access_token,
-            'touser':user.open_id,
-            'template_id':MESSAGE_TEMPLATE_ID,
-            'page':'pages/index/index',
-            'data':{
-                'thing1':{
-                    'value':'每日打卡提醒'
+            'access_token': access_token,
+            'touser': user.open_id,
+            'template_id': MESSAGE_TEMPLATE_ID,
+            'page': 'pages/index/index',
+            'data': {
+                'thing1': {
+                    'value': '每日打卡提醒'
                 },
-                'thing5':{
-                    'value':'开启元气满满的一天'
+                'thing5': {
+                    'value': '开启元气满满的一天'
                 },
-                'character_string3':{
-                    'value':'0/21'
+                'character_string3': {
+                    'value': '0/21'
                 },
-                'date14':{
-                    'value':'9:00'
+                'date14': {
+                    'value': '9:00'
                 },
             }
         }
-        print(requests.post(SEND_URL,data).content)
+        print(requests.post(SEND_URL, data).content)
+
+
+# 获取用户的某个时间段的打卡记录
+
+
+def getUserCalendar(request):
+    try:
+        open_id = get_redis_connection('default').get(
+            request.META.get("HTTP_SESSION")).decode('utf-8')
+    except AttributeError:
+        return HttpResponse(SESSION_INVALID)
+    # 请求的数据是一个标准的时间字符串
+    # 获取请求的时间段 对其进行处理 get 的参数分别为起始、结束
+    # 将字符串处理为标准deteTime
+    date_from = datetime.datetime.strptime(
+        request.GET['date_from'], "%Y-%m-%d")
+    date_to = datetime.datetime.strptime(
+        request.GET['date_to'], "%Y-%m-%d")
+    # 获取当前用户
+    user_obj = User.objects.get(open_id=open_id)
+    # 获取当前用户的目标范围内的打卡记录
+    attend_objs = UserAttendance.objects.filter(
+        date__range=(date_from, date_to), user=user_obj)
+
+    # 获取当前用户的最长打卡时间
+    learndays = user_obj.learndays
+    # 获取低于当前用户打卡时间的用户数和总用户数并计算击败的比例
+    less_count = User.objects.filter(learn_days__lt=learndays).count
+    user_count = User.objects.filter().count
+    ratio = float(less_count)/float(user_count)
+    res_obj = {}
+
+    # 传回数据分别为  区间内日期的数组  总学习天数  当前日期内参数 超越比例
+    temp_obj = {
+        'date': attend_objs,
+        'learndays': learndays,
+        'attend_days': len(attend_objs),
+        'ratio': ratio
+
+    }
+    res_obj['userCalendar'] = temp_obj
+
+    return HttpResponse(json.dumps(res_obj))
