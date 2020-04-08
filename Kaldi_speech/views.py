@@ -19,6 +19,10 @@ import os
 import requests
 import datetime
 import hashlib
+import logging
+
+# 日志输出，不再使用print
+logger = logging.getLogger(__name__)
 
 # Create your views here.
 
@@ -50,7 +54,7 @@ def Index(request):
             # 如果获取不到，则返回None
             # 获取不到open_id,根据用户提供的code从微信故武器获取open_id
             code = request.META.get("HTTP_CODE")
-            print(code)
+            logger.debug('user code:{}'.format(code))
             data = {
                 'appid': APP_ID,
                 'secret': APP_SECRECT,
@@ -58,8 +62,10 @@ def Index(request):
                 'grant_type': 'authorization_code'
             }
             res = json.loads(requests.get(WX_URL, params=data).content)
+            logger.debug(res)
             if 'errcode' in res:
                 # 获取出错时,直接返回
+                logger.debug('获取用户信息失败，返回404')
                 return HttpResponse(NOT_FOUND)
             else:
                 # 登录成功
@@ -81,18 +87,17 @@ def Index(request):
             changeSession = False
             session = ""
 
-        print(open_id)
+        logger.debug("用户open_id "+open_id)
         # 计算用户学习天数
         td = datetime.datetime.now()
         curr_date = datetime.date(td.year, td.month, td.day)
 
         # get_or_create返回的是一个元组
         user_obj, isCreate = User.objects.get_or_create(open_id=open_id)
-        
-        print(isCreate)
+        logger.debug("新用户：",isCreate)
         if isCreate:
             # 当用户首次使用时也会更新学习记录
-            print("add attendance")
+            logger.debug("新增学习记录")
             UserAttendance.objects.create(user=user_obj, attend_date=curr_date)
         # 只要用户点进小程序，即算学习一天
         # 获取当前时间，比对，不相同则learn-days加一天
@@ -100,7 +105,7 @@ def Index(request):
         # 如果用户首次进入
 
         if curr_date != user_obj.last_learn_time:
-            print('更新用户学习天数')
+            logger.debug('更新用户学习天数')
             user_obj.learn_days += 1
             # 创建一个学习记录
             # 新增学习记录
@@ -128,7 +133,7 @@ def Index(request):
 
 def getCourseInfo(request):
     order = request.GET['order']
-    print('课程要求排列顺序为 ： {}'.format(order))
+    logger.debug('课程要求排列顺序为 ： {}'.format(order))
     if order == 'default':
         course_objs = Course.objects.all()
     elif order == 'heat':
@@ -303,7 +308,7 @@ def getSentenceInfo(request):
                     'isBad': False
                 })
 
-            print(sep)
+            logger.debug(sep)
 
             # sep = json.load(open("C:\\Users\\mayn\\Documents\\Django_Kaldi\\test.json",'r',encoding='utf-8'))['sentence']
 
@@ -410,12 +415,12 @@ def getVerbTrans(request):
 
     user_obj = User.objects.get(open_id=open_id)
 
-    print('looking for verb: {}'.format(verb))
+    logger.debug('looking for verb: {}'.format(verb))
 
     try:
         # 尝试从数据库中获取单词信息
         verbObj = Verb.objects.get(verb=verb)
-        print('数据库中已经存在了嗷')
+        logger.debug('数据库中已经存在了嗷')
     except ObjectDoesNotExist:
         # 获取不到则调用有道查词API获取单词释义，并添加到数据库中
         verbInfo = json.loads(getTrans(verb))
@@ -471,10 +476,10 @@ def getVerbTrans(request):
     try:
         UserVerb.objects.get(user=user_obj, verb=verbObj)
         isFav = True
-        print('用户收藏过这个单词了嗷')
+        logger.debug('用户收藏过这个单词了嗷')
     except ObjectDoesNotExist:
         isFav = False
-        print('用户没收藏过这个单词嗷')
+        logger.debug('用户没收藏过这个单词嗷')
 
     verbData = {
         'verb': verbObj.verb,
@@ -541,7 +546,7 @@ def getVerbList(request):
     if len(vb_objs) == 0:
         res_obj['hasVerb'] = False
     else:
-        print('用户有收藏过单词嗷')
+        logger.debug('用户有收藏过单词嗷')
 
         res_obj['hasVerb'] = True
 
@@ -593,12 +598,12 @@ def judgeAudio(request):
             return HttpResponse(SESSION_INVALID)
 
         judge_type = request.POST['type']
-        print('Type: {}'.format(judge_type))
+        logger.debug('Type: {}'.format(judge_type))
         # 采用read直接读取二进制文件，对于较大文件不便使用，但此处用户录音一般不超过一分钟，可以使用
         # 尝试直接保存用户发音
         # user_audio = ContentFile(request.FILES['audio'].read())
         user_audio = request.FILES['audio'].read()
-        print('audio file size:{}'.format(len(user_audio)))
+        logger.debug('audio file size:{}'.format(len(user_audio)))
         user_obj = User.objects.get(open_id=open_id)
 
         score = 0
@@ -612,7 +617,7 @@ def judgeAudio(request):
 
             audio_file_path = os.path.join(MEDIA_ROOT, 'temp', 'temp_verb.mp3')
             # 这里收到的文件大小为0，有问题
-            print('audio file size: {}'.format(len(user_audio)))
+            logger.debug('audio file size: {}'.format(len(user_audio)))
             with open(audio_file_path, 'wb') as audio_file:
                 audio_file.write(user_audio)
             audio_file.close()
@@ -637,9 +642,9 @@ def judgeAudio(request):
                 os.system('rm {}'.format(temp_path))
                 ua_obj.audio.save('{}_{}.mp3'.format(
                     user_obj.id, sentence_id), ContentFile(user_audio))
-                print('用户以前发音过')
+                logger.debug('用户以前发音过')
             except ObjectDoesNotExist:
-                print('用户第一次发音')
+                logger.debug('用户第一次发音')
                 ua_obj = UserSentence.objects.create(
                     user=user_obj, sentence=sentence_obj, score=score)
                 ua_obj.audio.save('{}_{}.mp3'.format(
@@ -653,13 +658,13 @@ def judgeAudio(request):
             # 但添加时就对数据进行处理
             if sentence_obj.sentence_upper == '@default':
                 # 对例句进行处理，去除标点并转为大写
-                print(sentence_obj.sentence_en)
+                logger.debug(sentence_obj.sentence_en)
                 verb_list = re.findall(
                     r'[A-Za-z\']+', sentence_obj.sentence_en)
                 sentence_upper = ' '.join(verb_list)
                 sentence_obj.sentence_upper = sentence_upper.upper()
                 sentence_obj.save()
-            print(sentence_obj.sentence_upper)
+            logger.debug(sentence_obj.sentence_upper)
             res = get_score(GOP_ROOT, FileName, ua_obj.audio.path,
                             sentence_obj.sentence_upper)
             # res = -1
@@ -692,7 +697,7 @@ def getAudioList(request):
     if len(va_objs) == 0:
         res_obj['hasAudio'] = False
     else:
-        print('用户有录音嗷')
+        logger.debug('用户有录音嗷')
 
         res_obj['hasAudio'] = True
 
@@ -784,7 +789,7 @@ def getAccessToken():
             'grant_type': 'client_credential'
         }
         res = json.loads(requests.get(ACCESS_TOKEN_URL, data).content)
-        print(res)
+        logger.debug(res)
         if 'errcode' in res:
             raise Exception("get access token failed")
         access_token = res['access_token']
