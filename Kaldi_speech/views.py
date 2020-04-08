@@ -2,7 +2,7 @@
 # pylint: disable=no-member
 from django.shortcuts import render
 from django.http import HttpResponse
-from Kaldi_speech.models import Course, EveryDayMotto, Section, Sentence, User, UserAttendance, UserCourse, UserSection, UserSentence, UserVerb, Verb, VerbExplain
+from Kaldi_speech.models import *
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from YouDaoAPI.text_translation import getTrans
@@ -82,21 +82,29 @@ def Index(request):
             session = ""
 
         print(open_id)
-        # get_or_create返回的是一个元组
-        user_obj, _ = User.objects.get_or_create(open_id=open_id)
-
         # 计算用户学习天数
         td = datetime.datetime.now()
         curr_date = datetime.date(td.year, td.month, td.day)
-        # 创建一个学习记录
-        user = UserAttendance.objects.create(
-            user=user_obj, attend_date=curr_date)
+
+        # get_or_create返回的是一个元组
+        user_obj, isCreate = User.objects.get_or_create(open_id=open_id)
+        
+        print(isCreate)
+        if isCreate:
+            # 当用户首次使用时也会更新学习记录
+            print("add attendance")
+            UserAttendance.objects.create(user=user_obj, attend_date=curr_date)
         # 只要用户点进小程序，即算学习一天
         # 获取当前时间，比对，不相同则learn-days加一天
         # 比较最后学习时间，如果不在同一天，则不修改
+        # 如果用户首次进入
+
         if curr_date != user_obj.last_learn_time:
             print('更新用户学习天数')
             user_obj.learn_days += 1
+            # 创建一个学习记录
+            # 新增学习记录
+            UserAttendance.objects.create(user=user_obj, attend_date=curr_date)
         user_obj.save()
 
         # 实际在首页还会显示用户学习天数等信息，点击开始学习直接进入上次未完成的课程，没有则直接进入课程列表
@@ -863,25 +871,28 @@ def getUserCalendar(request):
     # 获取当前用户
     user_obj = User.objects.get(open_id=open_id)
     # 获取当前用户的目标范围内的打卡记录
-    attend_objs = UserAttendance.objects.filter(
-        date__range=(date_from, date_to), user=user_obj)
+    attend_objs = []
+
+    for obj in UserAttendance.objects.filter(attend_date__range=(date_from, date_to), user=user_obj):
+        attend_objs.append(obj.attend_date.isoformat())
 
     # 获取当前用户的最长打卡时间
-    learndays = user_obj.learndays
+    learndays = user_obj.learn_days
     # 获取低于当前用户打卡时间的用户数和总用户数并计算击败的比例
-    less_count = User.objects.filter(learn_days__lt=learndays).count
-    user_count = User.objects.filter().count
+    less_count = User.objects.filter(learn_days__lt=learndays).count()
+    user_count = User.objects.filter().count()
     ratio = float(less_count)/float(user_count)
     res_obj = {}
 
     # 传回数据分别为  区间内日期的数组  总学习天数  当前日期内参数 超越比例
     temp_obj = {
         'date': attend_objs,
+        # 总学习天数
         'learndays': learndays,
+        # 当月累计学习天数
         'attend_days': len(attend_objs),
         'ratio': ratio
 
     }
-    res_obj['userCalendar'] = temp_obj
 
-    return HttpResponse(json.dumps(res_obj))
+    return HttpResponse(json.dumps(temp_obj))

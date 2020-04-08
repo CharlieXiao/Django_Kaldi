@@ -31,7 +31,7 @@ GOP_ROOT = '/home/ubuntu/kaldi/egs/gop-compute'
 SECRET_KEY = '+wtj1+!y))xbr0chto!408&3)q#9v=3r=waown&*eiu!o@ccq9'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ['*']
 
@@ -40,7 +40,7 @@ ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
     # 'simpleui', 
-    'django_crontab',
+    # 'django_crontab',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',

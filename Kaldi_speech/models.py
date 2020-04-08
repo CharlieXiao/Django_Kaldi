@@ -198,7 +198,7 @@ class UserSentence(models.Model):
 
 class UserAttendance(models.Model):
     user = models.ForeignKey("User", on_delete=models.CASCADE)
-    attend_date = models.DateTimeField(
+    attend_date = models.DateField(
         verbose_name="打卡时间", default=timezone.now)
 
     def __str__(self):
