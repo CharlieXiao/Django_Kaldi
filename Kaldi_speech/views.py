@@ -46,8 +46,13 @@ ps: 如果后续需要对用户的open_id进行操作时，可以再向redis存�
 def Index(request):
     # 尝试从redis中获取用户的open_id
     # 请求中header保存在META数据段中，且获取的办法为HTTP_XXX,XXX为变量名称
-    open_id = get_redis_connection('default').get(
-        request.META.get("HTTP_SESSION"))
+    try:
+        # 如果redis连接失败或者解析失败
+        open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION"))
+    except:
+        # 获取不到open_id
+        open_id = None
+    
     if open_id is None:
         changeSession = True
         # 如果获取不到，则返回None
