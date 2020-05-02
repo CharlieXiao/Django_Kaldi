@@ -42,22 +42,9 @@ logger = logging.getLogger(__name__)
 ps: 如果后续需要对用户的open_id进行操作时，可以再向redis存储中添加一项，以3rd_session为键，open_id为key，这样可以保证服务器安全性
 '''
 
-
-def Index(request):
-    # 尝试从redis中获取用户的open_id
-    # 请求中header保存在META数据段中，且获取的办法为HTTP_XXX,XXX为变量名称
+def getUserOpenID(request):
     try:
-        # 如果redis连接失败或者解析失败
-        open_id = get_redis_connection('default').get(request.META.get("HTTP_SESSION"))
-    except:
-        # 获取不到open_id
-        open_id = None
-    
-    if open_id is None:
-        changeSession = True
-        # 如果获取不到，则返回None
-        # 获取不到open_id,根据用户提供的code从微信故武器获取open_id
-        code = request.META.get("HTTP_CODE")
+        code = request.GET['code'];
         logger.debug('user code:{}'.format(code))
         data = {
             'appid': APP_ID,
@@ -74,23 +61,16 @@ def Index(request):
         else:
             # 登录成功
             open_id = res['openid']
-            session_key = res['session_key']
-            # 生成3rd_，返回给小程序
-            sha = hashlib.sha1()
-            sha.update(open_id.encode())
-            sha.update(session_key.encode())
-            session = sha.hexdigest()
-            con = get_redis_connection('default')
-            # 将 3rd_session 保存到缓存中, 十二个小时过期
-            con.set(session, open_id, ex=12*60*60)
-            # 测试缓存过期的情况，如果过期则需要用户重新登录
-            # 返回open_id,并在小程序中存储在本地
-    else:
-        # 连接到default分区,获取不到时返回None,默认返回为Byte类型的数据，需要进行解码
-        open_id = open_id.decode('utf-8')
-        changeSession = False
-        session = ""
+            return HttpResponse(json.dumps({'open_id':open_id}))
+    except:
+        return HttpResponse(SESSION_INVALID);
 
+def Index(request):
+    
+    open_id = request.META.get("HTTP_OPENID");
+    if open_id is None:
+        return HttpResponse(SESSION_INVALID);
+    
     logger.debug("用户open_id "+open_id)
     # 计算用户学习天数
     td = datetime.datetime.now()
@@ -98,7 +78,7 @@ def Index(request):
 
     # get_or_create返回的是一个元组
     user_obj, isCreate = User.objects.get_or_create(open_id=open_id)
-    logger.debug("新用户：",isCreate)
+    logger.debug("新用户: {}".format(isCreate))
     if isCreate:
         # 当用户首次使用时也会更新学习记录
         logger.debug("新增学习记录")
@@ -126,9 +106,7 @@ def Index(request):
         'poster': motto.poster.url,
         'learn_days': user_obj.learn_days,
         'curr_course': user_obj.curr_course,
-        'status': 200,
-        'changeSession': changeSession,
-        'session': session
+        'status': 200
     }
     return HttpResponse(json.dumps(motto_obj))
 
@@ -165,11 +143,9 @@ def getCourseInfo(request):
 def getSectionInfo(request):
 
     # print(request.session['open_id'])
-    try:
-        open_id = get_redis_connection('default').get(
-            request.META.get("HTTP_SESSION")).decode('utf-8')
-    except AttributeError:
-        return HttpResponse(SESSION_INVALID)
+    open_id = request.META.get("HTTP_OPENID");
+    if open_id is None:
+        return HttpResponse(SESSION_INVALID);
 
     course_id = request.GET['course_id']
 
@@ -230,11 +206,9 @@ def getSectionInfo(request):
 def getSentenceInfo(request):
 
     # 获取用户open_id，修改相关信息
-    try:
-        open_id = get_redis_connection('default').get(
-            request.META.get("HTTP_SESSION")).decode('utf-8')
-    except AttributeError:
-        return HttpResponse(SESSION_INVALID)
+    open_id = request.META.get("HTTP_OPENID");
+    if open_id is None:
+        return HttpResponse(SESSION_INVALID);
 
     section_id = int(request.GET['section_id'])
 
@@ -349,11 +323,9 @@ def getSentenceInfo(request):
 
 def updataStudyStatus(request):
     # 获取用户当前学习状况
-    try:
-        open_id = get_redis_connection('default').get(
-            request.META.get("HTTP_SESSION")).decode('utf-8')
-    except AttributeError:
-        return HttpResponse(SESSION_INVALID)
+    open_id = request.META.get("HTTP_OPENID");
+    if open_id is None:
+        return HttpResponse(SESSION_INVALID);
 
     up_type = request.GET['type']
 
@@ -405,11 +377,9 @@ def updataStudyStatus(request):
 
 
 def getVerbTrans(request):
-    try:
-        open_id = get_redis_connection('default').get(
-            request.META.get("HTTP_SESSION")).decode('utf-8')
-    except AttributeError:
-        return HttpResponse(SESSION_INVALID)
+    open_id = request.META.get("HTTP_OPENID");
+    if open_id is None:
+        return HttpResponse(SESSION_INVALID);
 
     pattern = r'(\w{1,10}\.)\s(.*)'
 
@@ -506,11 +476,9 @@ def getVerbTrans(request):
 
 
 def addVerbFav(request):
-    try:
-        open_id = get_redis_connection('default').get(
-            request.META.get("HTTP_SESSION")).decode('utf-8')
-    except AttributeError:
-        return HttpResponse(SESSION_INVALID)
+    open_id = request.META.get("HTTP_OPENID");
+    if open_id is None:
+        return HttpResponse(SESSION_INVALID);
 
     isFav = request.GET['isFav']
     verb = request.GET['verb']
@@ -532,11 +500,9 @@ def addVerbFav(request):
 
 
 def getVerbList(request):
-    try:
-        open_id = get_redis_connection('default').get(
-            request.META.get("HTTP_SESSION")).decode('utf-8')
-    except AttributeError:
-        return HttpResponse(SESSION_INVALID)
+    open_id = request.META.get("HTTP_OPENID");
+    if open_id is None:
+        return HttpResponse(SESSION_INVALID);
 
     user_obj = User.objects.get(open_id=open_id)
 
@@ -593,11 +559,9 @@ def judgeAudio(request):
         # 必须是post请求
         # print(request.POST)
         # 使用DJango作为微信小程序后端，需要禁用Django的CSRF cookie监测
-        try:
-            open_id = get_redis_connection('default').get(
-                request.META.get("HTTP_SESSION")).decode('utf-8')
-        except AttributeError:
-            return HttpResponse(SESSION_INVALID)
+        open_id = request.META.get("HTTP_OPENID");
+        if open_id is None:
+            return HttpResponse(SESSION_INVALID);
 
         judge_type = request.POST['type']
         logger.debug('Type: {}'.format(judge_type))
@@ -683,11 +647,9 @@ def judgeAudio(request):
 
 
 def getAudioList(request):
-    try:
-        open_id = get_redis_connection('default').get(
-            request.META.get("HTTP_SESSION")).decode('utf-8')
-    except AttributeError:
-        return HttpResponse(SESSION_INVALID)
+    open_id = request.META.get("HTTP_OPENID");
+    if open_id is None:
+        return HttpResponse(SESSION_INVALID);
 
     user_obj = User.objects.get(open_id=open_id)
 
@@ -736,11 +698,9 @@ def removeAudioList(request):
 
 
 def getUserCourse(request):
-    try:
-        open_id = get_redis_connection('default').get(
-            request.META.get("HTTP_SESSION")).decode('utf-8')
-    except AttributeError:
-        return HttpResponse(SESSION_INVALID)
+    open_id = request.META.get("HTTP_OPENID");
+    if open_id is None:
+        return HttpResponse(SESSION_INVALID);
 
     order = request.GET['order']
 
@@ -863,11 +823,9 @@ def sendSubscribeMessage():
 
 
 def getUserCalendar(request):
-    try:
-        open_id = get_redis_connection('default').get(
-            request.META.get("HTTP_SESSION")).decode('utf-8')
-    except AttributeError:
-        return HttpResponse(SESSION_INVALID)
+    open_id = request.META.get("HTTP_OPENID");
+    if open_id is None:
+        return HttpResponse(SESSION_INVALID);
     # 请求的数据是一个标准的时间字符串
     # 获取请求的时间段 对其进行处理 get 的参数分别为起始、结束
     # 将字符串处理为标准deteTime

@@ -37,6 +37,5 @@ urlpatterns = [
     path('removeAudioList/', ks_views.removeAudioList),
     path('UserCourse/', ks_views.getUserCourse),
     path('UserCalendar/', ks_views.getUserCalendar),
-
-    path('Test/', ks_views.TestFunction),
+    path('UserOpenID/',ks_views.getUserOpenID),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
