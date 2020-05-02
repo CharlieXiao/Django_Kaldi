@@ -41,7 +41,7 @@ ALLOWED_HOSTS = ['*']
 # Application definition
 
 INSTALLED_APPS = [
-    # 'simpleui', 
+    'simpleui', 
     # 'django_crontab',
     'django.contrib.admin',
     'django.contrib.auth',
