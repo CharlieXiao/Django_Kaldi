@@ -163,9 +163,9 @@ def get_score(GopPath, FileName, FileSrc, Text, langModel='lang3', acousticModel
             if not has_match:
                 return -1
 
-        #导入phones_threshold json文件
-        with open("phones_threshold.json",'r', encoding='UTF-8') as f:
-            phones_threshold_dict = json.load(f)
+        # #导入phones_threshold json文件
+        # with open("phones_threshold.json",'r', encoding='UTF-8') as f:
+        #     phones_threshold_dict = json.load(f)
         
         #print(phones_threshold_dict)
 
@@ -177,8 +177,8 @@ def get_score(GopPath, FileName, FileSrc, Text, langModel='lang3', acousticModel
         phone_index = 0
 
         for j in range(len(score_list)):
-            THRESHOLD_LEVEL_1 = phones_threshold_dict[phone_list[j]][1]
-            THRESHOLD_LEVEL_2 = phones_threshold_dict[phone_list[j]][0]
+            # THRESHOLD_LEVEL_1 = phones_threshold_dict[phone_list[j]][1]
+            # THRESHOLD_LEVEL_2 = phones_threshold_dict[phone_list[j]][0]
             
             if phone_list[j] in ignore_phones:
                 continue
@@ -219,7 +219,7 @@ def get_score(GopPath, FileName, FileSrc, Text, langModel='lang3', acousticModel
         }
         os.chdir(RawWorkDir)
         return sentence_info
-    except expression as identifier:
+    except:
         return -1
 
     
