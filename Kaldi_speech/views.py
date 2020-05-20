@@ -98,7 +98,7 @@ def Index(request):
 
     # 实际在首页还会显示用户学习天数等信息，点击开始学习直接进入上次未完成的课程，没有则直接进入课程列表
     # 获得每日格言
-    motto = EveryDayMotto.objects.all()[0]
+    motto = EveryDayMotto.objects.order_by('?')[0]
 
     motto_obj = {
         'motto': motto.motto,
@@ -846,7 +846,7 @@ def getUserCalendar(request):
     # 获取低于当前用户打卡时间的用户数和总用户数并计算击败的比例
     less_count = User.objects.filter(learn_days__lt=learndays).count()
     user_count = User.objects.filter().count()
-    ratio = float(less_count)/float(user_count)
+    ratio = round(float(less_count)/float(user_count),2)
     res_obj = {}
 
     # 传回数据分别为  区间内日期的数组  总学习天数  当前日期内参数 超越比例
