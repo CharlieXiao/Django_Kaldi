@@ -211,8 +211,8 @@ def get_score(GopPath, FileName, FileSrc, Text, langModel='lang3', acousticModel
                 phone_index = 0
                 verb_index += 1
 
-        denominator = 2*(CntLevel1+CntLevel2+CntLevel3)
-        numerator = CntLevel1*2 + CntLevel2*1.5 + CntLevel3*1
+        denominator = 5*(CntLevel1+CntLevel2+CntLevel3)
+        numerator = CntLevel1*5 + CntLevel2*3 + CntLevel3*1
         sentence_info = {
             'score': int(numerator / denominator * 100),
             'sentence': sentence
